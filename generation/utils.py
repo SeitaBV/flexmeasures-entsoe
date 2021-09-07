@@ -4,11 +4,17 @@ from flask import current_app
 from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
 from flexmeasures.data.models.time_series import Sensor
 from flexmeasures.data.config import db
-from timely_beliefs.sensors.func_store import knowledge_horizons
 
 from .. import DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
 
 
+generation_sensors = (
+    ("Overall generation", "MWh"),
+    ("Solar", "MWh"),
+    ("Onshore wind", "MWh"),
+    ("Offshore wind", "MWh"),
+    ("CO2 intensity", "kg/MWh")
+)
 
 def ensure_generation_sensors():
     """
@@ -34,7 +40,7 @@ def ensure_generation_sensors():
             generic_asset_type=transmission_zone_type,
             account_id=None  # public
         )
-    for sensor_name, unit in (("Overall generation", "MWh"), ("Solar", "MWh"), ("Onshore wind", "MWh"), ("Offshore wind", "MWh"), ("CO2", "kg/h")):
+    for sensor_name, unit in generation_sensors:
         sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
         if not sensor:
             current_app.logger.info(f"Adding sensor {sensor_name} ...")
@@ -44,7 +50,6 @@ def ensure_generation_sensors():
                 generic_asset=transmission_zone,
                 timezone=timezone,
                 event_resolution=timedelta(hours=1),
-                knowledge_horizon=(knowledge_horizons.x_days_ago_at_y_oclock, dict(x=1, y=13, z="Europe/Amsterdam")),  # publishing time is 13:00
             )
             db.session.add(sensor)
     db.session.commit()

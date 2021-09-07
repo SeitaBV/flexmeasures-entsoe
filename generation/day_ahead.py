@@ -15,7 +15,7 @@ from flexmeasures.data.transactional import task_with_status_report
 
 from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
 from ..utils import ensure_data_source
-from .utils import ensure_generation_sensors 
+from .utils import generation_sensors, ensure_generation_sensors
 
 
 """
@@ -87,49 +87,53 @@ def import_day_ahead_generation(dryrun: bool=False):
         raise click.Abort
     
     client = EntsoePandasClient(api_key=auth_token)
-    log.info("Getting all generation ...")
-    all_generation: pd.DataFrame= client.query_generation_forecast(country_code, start=from_time, end=until_time)
-    log.debug("Overall aggregated generation: \n%s" % all_generation)
+    log.info("Getting scheduled generation ...")
+    # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
+    scheduled_generation: pd.DataFrame= client.query_generation_forecast(country_code, start=from_time, end=until_time)
+    log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(country_code, start=from_time, end=until_time, psr_type=None)
     log.debug("Green generation: \n%s" % green_generation_df)
 
     log.info("Down-sampling green energy forecast ...")
-    green_generation = green_generation_df.resample("60T").mean()    
-    log.debug("Resampled green generation: \n%s" % green_generation)
+    green_generation_df = green_generation_df.resample("60T").mean()  # ENTSO-E data is in MW
+    log.debug("Resampled green generation: \n%s" % green_generation_df)
 
     log.info("Aggregating green energy columns ...")
-    all_green_generation = green_generation.sum(axis="columns")
+    all_green_generation = green_generation_df.sum(axis="columns")
     log.debug("Aggregated green generation: \n%s" % all_green_generation)
 
-    log.info("Computing grey generation forecast ...")
-    grey_generation = all_generation - all_green_generation
-    log.debug("Grey generation: \n%s" % grey_generation)
+    log.info("Computing combined generation forecast ...")
+    all_generation = scheduled_generation + all_green_generation
+    log.debug("Combined generation: \n%s" % all_generation)
 
     log.info("Computing CO2 content from the MWh values ...")
-    co2 = calculate_CO2_content_in_kg_per_MWh(grey_generation, green_generation)
-    log.debug("Overall CO2 content (tonnes): \n%s" % co2)
+    co2_in_kg = calculate_CO2_content_in_kg(scheduled_generation, green_generation_df)
+    log.debug("Overall CO2 content (kg): \n%s" % co2_in_kg)
+    forecasted_kg_CO2_per_MWh = co2_in_kg / all_generation
+    log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
     # TODO: save values for each sensor we use, via fm.api.common.api_utils.save_to_db (make BeliefsDataFrames first)  
     if not dryrun:
-        pass
+        for sensor_name, unit in generation_sensors:
+            pass
 
 
-def calculate_CO2_content_in_kg_per_MWh(grey_generation: pd.Series, green_generation: pd.DataFrame) -> pd.Series:
+def calculate_CO2_content_in_kg(grey_generation: pd.Series, green_generation: pd.DataFrame) -> pd.Series:
     grey_CO2_intensity_factor = (  # TODO: a factor per hour of the day
         (grey_energy_mix["coal"] * kg_CO2_per_MWh["coal"])
          + (grey_energy_mix["gas"] * kg_CO2_per_MWh["gas"])
          + (grey_energy_mix["oil"] * kg_CO2_per_MWh["oil"])
     )
     current_app.logger.debug(f"Grey intensity factor: {grey_CO2_intensity_factor}")
-    grey_CO2_content_in_tonnes = grey_generation * grey_CO2_intensity_factor / 1000.
-    current_app.logger.debug("Grey CO2 content (tonnes): \n%s" % grey_CO2_content_in_tonnes)
+    grey_CO2_content = grey_generation * grey_CO2_intensity_factor
+    current_app.logger.debug("Grey CO2 content (tonnes): \n%s" % grey_CO2_content)
     
-    green_generation["solar CO2 tonnes"] = green_generation["Solar"] * kg_CO2_per_MWh["solar"] / 1000. 
-    green_generation["wind_onshore CO2 tonnes"] = green_generation["Wind Onshore"] * kg_CO2_per_MWh["wind_onshore"] / 1000.
-    green_generation["wind_offshore CO2 tonnes"] = green_generation["Wind Offshore"] * kg_CO2_per_MWh["wind_offshore"] / 1000.
+    green_generation["solar CO2"] = green_generation["Solar"] * kg_CO2_per_MWh["solar"] / 1000. 
+    green_generation["wind_onshore CO2"] = green_generation["Wind Onshore"] * kg_CO2_per_MWh["wind_onshore"]
+    green_generation["wind_offshore CO2"] = green_generation["Wind Offshore"] * kg_CO2_per_MWh["wind_offshore"]
     
-    current_app.logger.debug("Green generation and CO2 content (tonnes): \n%s" % green_generation)
+    current_app.logger.debug("Green generation and CO2 content: \n%s" % green_generation)
 
-    return grey_CO2_content_in_tonnes + green_generation["solar CO2 tonnes"] + green_generation["wind_onshore CO2 tonnes"] + green_generation["wind_offshore CO2 tonnes"]
+    return grey_CO2_content + green_generation["solar CO2"] + green_generation["wind_onshore CO2"] + green_generation["wind_offshore CO2"]
