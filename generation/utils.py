@@ -6,7 +6,7 @@ from flexmeasures.data.models.time_series import Sensor
 from flexmeasures.data.config import db
 from timely_beliefs.sensors.func_store import knowledge_horizons
 
-from .. import DEFAULT_COUNTRY_CODE  # noqa: E402
+from .. import DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
 
 
 
@@ -16,6 +16,8 @@ def ensure_generation_sensors():
     generation data, plus sensors for relevant data we collect.
     """
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+    timezone = current_app.config.get("ENTSOE_TIMEZONE", DEFAULT_TIMEZONE)
+
     transmission_zone_type = GenericAssetType.query.filter(
         GenericAssetType.name == "transmission zone"
     ).one_or_none()
@@ -40,7 +42,7 @@ def ensure_generation_sensors():
                 name=sensor_name,
                 unit=unit,
                 generic_asset=transmission_zone,
-                timezone="Europe/Amsterdam",
+                timezone=timezone,
                 event_resolution=timedelta(hours=1),
                 knowledge_horizon=(knowledge_horizons.x_days_ago_at_y_oclock, dict(x=1, y=13, z="Europe/Amsterdam")),  # publishing time is 13:00
             )
