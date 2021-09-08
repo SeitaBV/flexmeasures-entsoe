@@ -13,4 +13,3 @@ def ensure_data_source() -> DataSource:
         entsoe_data_source = DataSource(name="ENTSO-E", type="forecasting script")
         db.session.add(entsoe_data_source)
     return entsoe_data_source
-

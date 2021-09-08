@@ -14,8 +14,9 @@ generation_sensors = (
     ("Solar", "MWh"),
     ("Onshore wind", "MWh"),
     ("Offshore wind", "MWh"),
-    ("CO2 intensity", "kg/MWh")
+    ("CO2 intensity", "kg/MWh"),
 )
+
 
 def ensure_generation_sensors() -> List[Sensor]:
     """
@@ -31,16 +32,21 @@ def ensure_generation_sensors() -> List[Sensor]:
     ).one_or_none()
     if not transmission_zone_type:
         current_app.logger.info("Adding transmission zone type ...")
-        transmission_zone_type = GenericAssetType(name="transmission zone", description="A grid regulated & balanced as a whole, usually a national grid.")
+        transmission_zone_type = GenericAssetType(
+            name="transmission zone",
+            description="A grid regulated & balanced as a whole, usually a national grid.",
+        )
         db.session.add(transmission_zone_type)
     ga_name = f"{country_code} transmission zone"
-    transmission_zone = GenericAsset.query.filter(GenericAsset.name == ga_name).one_or_none()
+    transmission_zone = GenericAsset.query.filter(
+        GenericAsset.name == ga_name
+    ).one_or_none()
     if not transmission_zone:
         current_app.logger.info(f"Adding {ga_name} ...")
         transmission_zone = GenericAsset(
             name=ga_name,
             generic_asset_type=transmission_zone_type,
-            account_id=None  # public
+            account_id=None,  # public
         )
     for sensor_name, unit in generation_sensors:
         sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
