@@ -12,10 +12,12 @@ from entsoe.entsoe import URL
 import pandas as pd
 from flexmeasures.utils.time_utils import server_now
 from flexmeasures.data.transactional import task_with_status_report
+from flexmeasures.api.common.utils.api_utils import save_to_db
+from timely_beliefs import BeliefsDataFrame
 
 from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
 from ..utils import ensure_data_source
-from .utils import generation_sensors, ensure_generation_sensors
+from .utils import ensure_generation_sensors
 
 
 """
@@ -69,11 +71,12 @@ def import_day_ahead_generation(dryrun: bool=False):
 
     log.info(f"Will contact ENSO-E at {entsoe.entsoe.URL}, country code: {country_code}, timezone {timezone} ...")
 
-    ensure_data_source()
-    ensure_generation_sensors()
+    data_source = ensure_data_source()
+    sensors = ensure_generation_sensors()
 
-    now = server_now().astimezone(pytz.timezone(timezone)).replace(minute=0, second=0, microsecond=0)
-    from_time = (now + timedelta(hours=24)).replace(hour=0)
+    now = server_now().astimezone(pytz.timezone(timezone))
+    now_hour = now.replace(minute=0, second=0, microsecond=0)
+    from_time = (now_hour + timedelta(hours=24)).replace(hour=0)
     until_time = from_time + timedelta(hours=24)
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
@@ -91,6 +94,9 @@ def import_day_ahead_generation(dryrun: bool=False):
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
     scheduled_generation: pd.DataFrame= client.query_generation_forecast(country_code, start=from_time, end=until_time)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
+    if scheduled_generation.empty:
+        click.echo("Result is empty. Probably ENTSO-E does not provide these forecasts yet ...")
+        raise click.Abort
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(country_code, start=from_time, end=until_time, psr_type=None)
@@ -114,10 +120,33 @@ def import_day_ahead_generation(dryrun: bool=False):
     forecasted_kg_CO2_per_MWh = co2_in_kg / all_generation
     log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
-    # TODO: save values for each sensor we use, via fm.api.common.api_utils.save_to_db (make BeliefsDataFrames first)  
+    def get_series_for_sensor(sensor):
+        if sensor.name == "Scheduled generation":
+            return scheduled_generation
+        elif sensor.name == "Solar":
+            return green_generation_df["Solar"]
+        elif sensor.name == "Onshore wind":
+            return green_generation_df["Wind Onshore"]
+        elif sensor.name == "Offshore wind":
+            return green_generation_df["Wind Offshore"]
+        elif sensor.name == "CO2 intensity":
+            return forecasted_kg_CO2_per_MWh
+        else:
+            log.error(f"Cannot connect data to sensor {sensor.name}.")
+            raise click.Abort
+
     if not dryrun:
-        for sensor_name, unit in generation_sensors:
-            pass
+        for sensor in sensors:
+            log.debug(f"Saving data for Sensor {sensor.name} ...")
+            series = get_series_for_sensor(sensor)
+            series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case
+            bdf = BeliefsDataFrame(
+                series,
+                source=data_source,
+                sensor=sensor,
+                belief_time=now,
+            )
+            save_to_db(bdf)  # TODO: we should validate sensor data coming from CLI functions, just as the API does
 
 
 def calculate_CO2_content_in_kg(grey_generation: pd.Series, green_generation: pd.DataFrame) -> pd.Series:

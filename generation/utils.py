@@ -1,3 +1,4 @@
+from typing import List
 from datetime import timedelta
 from flask import current_app
 
@@ -9,18 +10,19 @@ from .. import DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
 
 
 generation_sensors = (
-    ("Overall generation", "MWh"),
+    ("Scheduled generation", "MWh"),
     ("Solar", "MWh"),
     ("Onshore wind", "MWh"),
     ("Offshore wind", "MWh"),
     ("CO2 intensity", "kg/MWh")
 )
 
-def ensure_generation_sensors():
+def ensure_generation_sensors() -> List[Sensor]:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers
     generation data, plus sensors for relevant data we collect.
     """
+    sensors = []
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
     timezone = current_app.config.get("ENTSOE_TIMEZONE", DEFAULT_TIMEZONE)
 
@@ -52,4 +54,6 @@ def ensure_generation_sensors():
                 event_resolution=timedelta(hours=1),
             )
             db.session.add(sensor)
+        sensors.append(sensor)
     db.session.commit()
+    return sensors

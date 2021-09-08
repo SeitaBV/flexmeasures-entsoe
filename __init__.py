@@ -14,7 +14,7 @@ entsoe_data_bp = Blueprint(
 )
 
 DEFAULT_COUNTRY_CODE = "NL"
-DEFAULT_TIMEZONE = "Europe/Brussels"
+DEFAULT_TIMEZONE = "Europe/Amsterdam"  # This is what we receive, even if ENTSO-E documents Europe/Brussels
 
 
 entsoe_data_bp.cli.help = "ENTSO-E Data commands"
