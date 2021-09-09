@@ -6,7 +6,7 @@ from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetTy
 from flexmeasures.data.models.time_series import Sensor
 from flexmeasures.data.config import db
 
-from .. import DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
+from .. import DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
 
 
 generation_sensors = (
@@ -25,7 +25,7 @@ def ensure_generation_sensors() -> List[Sensor]:
     """
     sensors = []
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    timezone = current_app.config.get("ENTSOE_TIMEZONE", DEFAULT_TIMEZONE)
+    timezone = current_app.config.get("ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE)
 
     transmission_zone_type = GenericAssetType.query.filter(
         GenericAssetType.name == "transmission zone"

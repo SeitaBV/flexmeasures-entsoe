@@ -14,7 +14,7 @@ from flexmeasures.data.transactional import task_with_status_report
 from flexmeasures.api.common.utils.api_utils import save_to_db
 from timely_beliefs import BeliefsDataFrame
 
-from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_TIMEZONE  # noqa: E402
+from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
 from ..utils import ensure_data_source
 from .utils import ensure_generation_sensors
 
@@ -63,16 +63,16 @@ def import_day_ahead_generation(dryrun: bool = False):
     """
     log = current_app.logger
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    timezone = current_app.config.get("ENTSOE_TIMEZONE", DEFAULT_TIMEZONE)
+    country_timezone = current_app.config.get("ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE)
 
     log.info(
-        f"Will contact ENSO-E at {entsoe.entsoe.URL}, country code: {country_code}, timezone {timezone} ..."
+        f"Will contact ENSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
     )
 
     data_source = ensure_data_source()
     sensors = ensure_generation_sensors()
 
-    now = server_now().astimezone(pytz.timezone(timezone))
+    now = server_now().astimezone(pytz.timezone(country_timezone))
     now_hour = now.replace(minute=0, second=0, microsecond=0)
     from_time = (now_hour + timedelta(hours=24)).replace(hour=0)
     until_time = from_time + timedelta(hours=24)
