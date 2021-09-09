@@ -1,3 +1,4 @@
+from typing import Union
 from datetime import timedelta
 import pytz
 
@@ -79,31 +80,37 @@ def import_day_ahead_generation(dryrun: bool = False):
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
     )
-    from_time = from_time.astimezone(pytz.utc)
-    until_time = until_time.astimezone(pytz.utc)
+    
+    # entsoe-py expects time params as pd.Timestamp
+    from_time = pd.Timestamp(from_time)
+    until_time = pd.Timestamp(until_time)
 
     auth_token = current_app.config.get("ENTSOE_AUTH_TOKEN")
     if not auth_token:
         click.echo("Setting ENTSOE_AUTH_TOKEN seems empty!")
         raise click.Abort
 
+    def check_empty(data: Union[pd.DataFrame, pd.Series]):
+        if data.empty:
+            click.echo(
+                "Result is empty. Probably ENTSO-E does not provide these forecasts yet ..."
+            )
+            raise click.Abort
+    
     client = EntsoePandasClient(api_key=auth_token)
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
     scheduled_generation: pd.DataFrame = client.query_generation_forecast(
         country_code, start=from_time, end=until_time
     )
+    check_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
-    if scheduled_generation.empty:
-        click.echo(
-            "Result is empty. Probably ENTSO-E does not provide these forecasts yet ..."
-        )
-        raise click.Abort
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
         country_code, start=from_time, end=until_time, psr_type=None
     )
+    check_empty(green_generation_df)
     log.debug("Green generation: \n%s" % green_generation_df)
 
     log.info("Down-sampling green energy forecast ...")
