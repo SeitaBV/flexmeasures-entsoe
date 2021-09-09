@@ -26,12 +26,12 @@ We get the overall forecast and the solar&wind forecast, so we know the share of
 For now, we'll compute the CO2 mix from some assumptions.
 """
 
+# TODO: Decide which sources to use ― https://github.com/SeitaBV/flexmeasures-entsoe/issues/2 
 
 # Source for these ratios: https://ourworldindata.org/energy/country/netherlands#what-sources-does-the-country-get-its-electricity-from (2020 data)
 grey_energy_mix = dict(gas=0.598, oil=0.045, coal=0.0718)
+
 # Source for kg CO2 per MWh: https://energy.utexas.edu/news/nuclear-and-wind-power-estimated-have-lowest-levelized-co2-emissions
-# TODO: one can still use other sources, e.g. https://ourworldindata.org/grapher/carbon-dioxide-emissions-factor has only fossil fuels and different numbers
-# If there is one (trustable) source that lists all of the below sources, let's use that.
 kg_CO2_per_MWh = dict(
     coal=870,  # lignite
     gas=464,  # natural
@@ -159,10 +159,8 @@ def import_day_ahead_generation(dryrun: bool = False):
                 sensor=sensor,
                 belief_time=now,
             )
-            save_to_db(
-                bdf
-            )  # TODO: we should validate sensor data coming from CLI functions, just as the API does
-
+            # TODO: evaluate some trais of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
+            save_to_db(bdf)  
 
 def calculate_CO2_content_in_kg(
     grey_generation: pd.Series, green_generation: pd.DataFrame
