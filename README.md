@@ -24,10 +24,10 @@ using the `FLEXMEASURES_PLUGIN_PATHS` setting.
 2. Add `ENTSOE_AUTH_TOKEN` to your FlexMeasures config (e.g. ~/.flexmeasures.cfg).
 You can generate this token after you made an account at ENTSO-E, read more [here](https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html#_authentication_and_authorisation). 
 
-Optionally, override other settings (defaults shown here):
+   Optionally, override other settings (defaults shown here):
 
-    ENTSOE_COUNTRY_CODE = "NL"
-    ENTSOE_COUNTRY_TIMEZONE = "Europe/Amsterdam"
+       ENTSOE_COUNTRY_CODE = "NL"
+       ENTSOE_COUNTRY_TIMEZONE = "Europe/Amsterdam"
 
 3. `pip install entsoe-py`
 
