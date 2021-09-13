@@ -67,7 +67,7 @@ def import_day_ahead_generation(dryrun: bool = False):
     country_timezone = current_app.config.get("ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE)
 
     log.info(
-        f"Will contact ENSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
+        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
     )
 
     data_source = ensure_data_source()
@@ -152,15 +152,16 @@ def import_day_ahead_generation(dryrun: bool = False):
         for sensor in sensors:
             log.debug(f"Saving data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
-            series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case
+            series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
             bdf = BeliefsDataFrame(
                 series,
                 source=data_source,
                 sensor=sensor,
                 belief_time=now,
             )
-            # TODO: evaluate some trais of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
+            # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
             save_to_db(bdf)  
+
 
 def calculate_CO2_content_in_kg(
     grey_generation: pd.Series, green_generation: pd.DataFrame
