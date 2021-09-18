@@ -33,7 +33,7 @@ You can generate this token after you made an account at ENTSO-E, read more [her
    The `ENTSOE_DERIVED_DATA_SOURCE` option is used to name the source of data that this plugin derives from ENTSO-E data, like a CO₂ signal.
    Original ENTSO-E data is reported as being sourced by `"ENTSO-E"`.
 
-4. `pip install entsoe-py`
+3. `pip install entsoe-py`
 
 
 ## Development
