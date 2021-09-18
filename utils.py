@@ -1,15 +1,20 @@
 from flask import current_app
 
 from flexmeasures.data.models.data_sources import DataSource
-from flexmeasures.data.config import db
+from flexmeasures.data.utils import get_data_source
+
+from . import DEFAULT_DERIVED_DATA_SOURCE
 
 
 def ensure_data_source() -> DataSource:
-    entsoe_data_source = DataSource.query.filter(
-        DataSource.name == "ENTSO-E"
-    ).one_or_none()
-    if not entsoe_data_source:
-        current_app.logger.info("Adding ENTSO-E data source ...")
-        entsoe_data_source = DataSource(name="ENTSO-E", type="forecasting script")
-        db.session.add(entsoe_data_source)
-    return entsoe_data_source
+    return get_data_source(
+        data_source_name="ENTSO-E",
+        data_source_type="forecasting script",
+    )
+
+
+def ensure_data_source_for_derived_data() -> DataSource:
+    return get_data_source(
+        data_source_name=current_app.config.get("ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE),
+        data_source_type="forecasting script",
+    )
