@@ -52,7 +52,7 @@ kg_CO2_per_MWh = dict(
     "--from-date",
     required=False,
     type=click.DateTime(["%Y-%m-%d"]),
-    help="Query data from this date onwards. If not specified, defaults to today",
+    help="Query data from this date onwards. If not specified, defaults to --to-date",
 )
 @click.option(
     "--to-date",
@@ -63,16 +63,16 @@ type=click.DateTime(["%Y-%m-%d"]),
 @click.option(
     "--dryrun/--no-dryrun",
     default=False,
-    help="In Dry run, do not save the data to the db.",
+    help="In dry run mode, do not save the data to the db.",
 )
 @with_appcontext
 @task_with_status_report
 def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[datetime] = None, to_date: Optional[datetime] = None):
     """
-    Import forecasted generation for any date range, defaulting to today and tomorrow.
+    Import forecasted generation for any date range, defaulting to tomorrow.
     This will save overall generation, solar, offshore and onshore wind, and the estimated CO2 content per hour.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
-    when prices are announced.
+    when tomorrow's prices are announced.
     """
     log = current_app.logger
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
@@ -87,14 +87,15 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
 
     # Parse CLI options (or set defaults)
     # entsoe-py expects time params as pd.Timestamp
-    if from_date is None:
-        from_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
     if to_date is None:
         today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
         to_date = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone)) + pd.offsets.DateOffset(days=1)  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
     else:
         to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
+    if from_date is None:
+        from_time = to_date
+    else:
+        from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
     until_time = to_date + pd.offsets.DateOffset(days=1)  # because to_date is inclusive
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
