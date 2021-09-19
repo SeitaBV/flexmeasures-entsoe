@@ -9,12 +9,13 @@ from flexmeasures.data.config import db
 from .. import DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
 
 
+# sensor_name, unit, data sourced directly by ENTSO-E or not (i.e. derived)
 generation_sensors = (
-    ("Scheduled generation", "MWh"),
-    ("Solar", "MWh"),
-    ("Onshore wind", "MWh"),
-    ("Offshore wind", "MWh"),
-    ("CO2 intensity", "kg/MWh"),
+    ("Scheduled generation", "MWh", True),
+    ("Solar", "MWh", True),
+    ("Onshore wind", "MWh", True),
+    ("Offshore wind", "MWh", True),
+    ("CO2 intensity", "kg/MWh", False),
 )
 
 
@@ -48,7 +49,7 @@ def ensure_generation_sensors() -> List[Sensor]:
             generic_asset_type=transmission_zone_type,
             account_id=None,  # public
         )
-    for sensor_name, unit in generation_sensors:
+    for sensor_name, unit, data_by_entsoe in generation_sensors:
         sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
         if not sensor:
             current_app.logger.info(f"Adding sensor {sensor_name} ...")
@@ -60,6 +61,7 @@ def ensure_generation_sensors() -> List[Sensor]:
                 event_resolution=timedelta(hours=1),
             )
             db.session.add(sensor)
+        sensor.data_by_entsoe = data_by_entsoe
         sensors.append(sensor)
     db.session.commit()
     return sensors

@@ -156,7 +156,7 @@ def import_day_ahead_generation(dryrun: bool = False):
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
             bdf = BeliefsDataFrame(
                 series,
-                source=entsoe_data_source if not sensor.name == "CO2 intensity" else derived_data_source,
+                source=entsoe_data_source if sensor.data_by_entsoe else derived_data_source,
                 sensor=sensor,
                 belief_time=now,
             )
