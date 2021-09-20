@@ -16,7 +16,7 @@ from flexmeasures.api.common.utils.api_utils import save_to_db
 from timely_beliefs import BeliefsDataFrame
 
 from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
-from ..utils import ensure_data_source
+from ..utils import ensure_data_source, ensure_data_source_for_derived_data
 from .utils import ensure_generation_sensors
 
 
@@ -70,7 +70,8 @@ def import_day_ahead_generation(dryrun: bool = False):
         f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
     )
 
-    data_source = ensure_data_source()
+    entsoe_data_source = ensure_data_source()
+    derived_data_source = ensure_data_source_for_derived_data()
     sensors = ensure_generation_sensors()
 
     now = server_now().astimezone(pytz.timezone(country_timezone))
@@ -155,7 +156,7 @@ def import_day_ahead_generation(dryrun: bool = False):
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
             bdf = BeliefsDataFrame(
                 series,
-                source=data_source,
+                source=entsoe_data_source if sensor.data_by_entsoe else derived_data_source,
                 sensor=sensor,
                 belief_time=now,
             )
