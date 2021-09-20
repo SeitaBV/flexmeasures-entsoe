@@ -1,5 +1,5 @@
-from typing import Union
-from datetime import timedelta
+from typing import Optional, Union
+from datetime import datetime
 import pytz
 
 import click
@@ -49,18 +49,30 @@ kg_CO2_per_MWh = dict(
 
 @entsoe_data_bp.cli.command("import-day-ahead-generation")
 @click.option(
+    "--from-date",
+    required=False,
+    type=click.DateTime(["%Y-%m-%d"]),
+    help="Query data from this date onwards. If not specified, defaults to --to-date",
+)
+@click.option(
+    "--to-date",
+    required=False,
+type=click.DateTime(["%Y-%m-%d"]),
+    help="Query data until this date (inclusive). If not specified, defaults to tomorrow.",
+)
+@click.option(
     "--dryrun/--no-dryrun",
     default=False,
-    help="In Dry run, do not save the data to the db.",
+    help="In dry run mode, do not save the data to the db.",
 )
 @with_appcontext
 @task_with_status_report
-def import_day_ahead_generation(dryrun: bool = False):
+def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[datetime] = None, to_date: Optional[datetime] = None):
     """
-    Import forecasted generation for the upcoming day.
+    Import forecasted generation for any date range, defaulting to tomorrow.
     This will save overall generation, solar, offshore and onshore wind, and the estimated CO2 content per hour.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
-    when prices are announced.
+    when tomorrow's prices are announced.
     """
     log = current_app.logger
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
@@ -74,17 +86,21 @@ def import_day_ahead_generation(dryrun: bool = False):
     derived_data_source = ensure_data_source_for_derived_data()
     sensors = ensure_generation_sensors()
 
-    now = server_now().astimezone(pytz.timezone(country_timezone))
-    now_hour = now.replace(minute=0, second=0, microsecond=0)
-    from_time = (now_hour + timedelta(hours=24)).replace(hour=0)
-    until_time = from_time + timedelta(hours=24)
+    # Parse CLI options (or set defaults)
+    # entsoe-py expects time params as pd.Timestamp
+    if to_date is None:
+        today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        to_date = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone)) + pd.offsets.DateOffset(days=1)  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
+    else:
+        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
+    if from_date is None:
+        from_time = to_date
+    else:
+        from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
+    until_time = to_date + pd.offsets.DateOffset(days=1)  # because to_date is inclusive
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
     )
-    
-    # entsoe-py expects time params as pd.Timestamp
-    from_time = pd.Timestamp(from_time)
-    until_time = pd.Timestamp(until_time)
 
     auth_token = current_app.config.get("ENTSOE_AUTH_TOKEN")
     if not auth_token:
@@ -97,7 +113,8 @@ def import_day_ahead_generation(dryrun: bool = False):
                 "Result is empty. Probably ENTSO-E does not provide these forecasts yet ..."
             )
             raise click.Abort
-    
+
+    now = server_now().astimezone(pytz.timezone(country_timezone))
     client = EntsoePandasClient(api_key=auth_token)
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
@@ -154,14 +171,15 @@ def import_day_ahead_generation(dryrun: bool = False):
             log.debug(f"Saving data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
+            belief_times = (series.index.floor("D") - pd.Timedelta("6H")).to_series().clip(upper=now)  # published no later than D-1 18:00 Brussels time
             bdf = BeliefsDataFrame(
                 series,
                 source=entsoe_data_source if sensor.data_by_entsoe else derived_data_source,
                 sensor=sensor,
-                belief_time=now,
+                belief_time=belief_times,
             )
             # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
-            save_to_db(bdf)  
+            save_to_db(bdf)
 
 
 def calculate_CO2_content_in_kg(
