@@ -171,7 +171,7 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
             log.debug(f"Saving data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
-            belief_times = (series.index.floor("D") - pd.Timedelta("6H")).to_series().clip(upper=now)  # published no later than D-1 18:00 Brussels time
+            belief_times = (series.index.floor("D") - pd.Timedelta("6H")).to_frame(name="clipped_belief_times").clip(upper=now).set_index("clipped_belief_times").index  # published no later than D-1 18:00 Brussels time
             bdf = BeliefsDataFrame(
                 series,
                 source=entsoe_data_source if sensor.data_by_entsoe else derived_data_source,
