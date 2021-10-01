@@ -16,7 +16,11 @@ from flexmeasures.data.transactional import task_with_status_report
 from flexmeasures.api.common.utils.api_utils import save_to_db
 from timely_beliefs import BeliefsDataFrame
 
-from .. import entsoe_data_bp, DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
+from .. import (
+    entsoe_data_bp,
+    DEFAULT_COUNTRY_CODE,
+    DEFAULT_COUNTRY_TIMEZONE,
+)  # noqa: E402
 from ..utils import ensure_data_source, ensure_data_source_for_derived_data
 from .utils import ensure_generation_sensors
 
@@ -27,7 +31,7 @@ We get the overall forecast and the solar&wind forecast, so we know the share of
 For now, we'll compute the CO2 mix from some assumptions.
 """
 
-# TODO: Decide which sources to use ― https://github.com/SeitaBV/flexmeasures-entsoe/issues/2 
+# TODO: Decide which sources to use ― https://github.com/SeitaBV/flexmeasures-entsoe/issues/2
 
 # Source for these ratios: https://ourworldindata.org/energy/country/netherlands#what-sources-does-the-country-get-its-electricity-from (2020 data)
 grey_energy_mix = dict(gas=0.598, oil=0.045, coal=0.0718)
@@ -58,7 +62,7 @@ kg_CO2_per_MWh = dict(
 @click.option(
     "--to-date",
     required=False,
-type=click.DateTime(["%Y-%m-%d"]),
+    type=click.DateTime(["%Y-%m-%d"]),
     help="Query data until this date (inclusive). If not specified, defaults to tomorrow.",
 )
 @click.option(
@@ -68,7 +72,11 @@ type=click.DateTime(["%Y-%m-%d"]),
 )
 @with_appcontext
 @task_with_status_report
-def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[datetime] = None, to_date: Optional[datetime] = None):
+def import_day_ahead_generation(
+    dryrun: bool = False,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+):
     """
     Import forecasted generation for any date range, defaulting to tomorrow.
     This will save overall generation, solar, offshore and onshore wind, and the estimated CO2 content per hour.
@@ -77,7 +85,9 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
     """
     log = current_app.logger
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    country_timezone = current_app.config.get("ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE)
+    country_timezone = current_app.config.get(
+        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
+    )
 
     log.info(
         f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
@@ -90,8 +100,14 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
     # Parse CLI options (or set defaults)
     # entsoe-py expects time params as pd.Timestamp
     if to_date is None:
-        today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-        to_date = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone)) + pd.offsets.DateOffset(days=1)  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
+        today_start = datetime.today().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        to_date = pd.Timestamp(
+            today_start, tzinfo=pytz.timezone(country_timezone)
+        ) + pd.offsets.DateOffset(
+            days=1
+        )  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
     else:
         to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
     if from_date is None:
@@ -172,16 +188,26 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
             log.debug(f"Saving data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
-            belief_times = (series.index.floor("D") - pd.Timedelta("6H")).to_frame(name="clipped_belief_times").clip(upper=now).set_index("clipped_belief_times").index  # published no later than D-1 18:00 Brussels time
+            belief_times = (
+                (series.index.floor("D") - pd.Timedelta("6H"))
+                .to_frame(name="clipped_belief_times")
+                .clip(upper=now)
+                .set_index("clipped_belief_times")
+                .index
+            )  # published no later than D-1 18:00 Brussels time
             bdf = BeliefsDataFrame(
                 series,
-                source=entsoe_data_source if sensor.data_by_entsoe else derived_data_source,
+                source=entsoe_data_source
+                if sensor.data_by_entsoe
+                else derived_data_source,
                 sensor=sensor,
                 belief_time=belief_times,
             )
 
             # Drop beliefs that haven't changed
-            bdf = bdf.groupby(level=["belief_time"], as_index=False).apply(drop_unchanged_beliefs)
+            bdf = bdf.groupby(level=["belief_time"], as_index=False).apply(
+                drop_unchanged_beliefs
+            )
 
             # Work around bug in which groupby still introduces an index level, even though we asked it not to
             if None in bdf.index.names:

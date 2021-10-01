@@ -66,8 +66,12 @@ def determine_net_emission_factors(shares: pd.DataFrame) -> pd.Series:
     # todo: substitute placeholder for unknown emission factor of waste
     emission_factors["waste"] = emission_factors["biomass"]
     for production_type in shares.columns:
-        shares[production_type] = shares[production_type] * emission_factors[production_type]
-    return shares.sum(axis=1).rename("Average emissions from Dutch electricity production (kg CO₂ eq/MWh)")
+        shares[production_type] = (
+            shares[production_type] * emission_factors[production_type]
+        )
+    return shares.sum(axis=1).rename(
+        "Average emissions from Dutch electricity production (kg CO₂ eq/MWh)"
+    )
 
 
 def ensure_generation_sensors() -> List[Sensor]:
@@ -77,7 +81,9 @@ def ensure_generation_sensors() -> List[Sensor]:
     """
     sensors = []
     country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    timezone = current_app.config.get("ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE)
+    timezone = current_app.config.get(
+        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
+    )
 
     transmission_zone_type = GenericAssetType.query.filter(
         GenericAssetType.name == "transmission zone"
