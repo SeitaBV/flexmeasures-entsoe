@@ -119,7 +119,7 @@ def import_day_ahead_generation(dryrun: bool = False, from_date: Optional[dateti
     client = EntsoePandasClient(api_key=auth_token)
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
-    scheduled_generation: pd.DataFrame = client.query_generation_forecast(
+    scheduled_generation: pd.Series = client.query_generation_forecast(
         country_code, start=from_time, end=until_time
     )
     check_empty(scheduled_generation)
