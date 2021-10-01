@@ -1,6 +1,8 @@
 from typing import List
 from datetime import timedelta
 from flask import current_app
+import numpy as np
+import pandas as pd
 
 from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
 from flexmeasures.data.models.time_series import Sensor
@@ -9,6 +11,19 @@ from flexmeasures.data.config import db
 from .. import DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
 
 
+grey_energy_sources = [
+    "Biomass",
+    "Fossil Gas",
+    "Fossil Hard coal",
+    "Nuclear",
+    "Other",
+    "Waste",
+]
+green_energy_sources = [
+    "wind_offshore_forecast",
+    "wind_onshore_forecast",
+    "solar_forecast",
+]
 # sensor_name, unit, data sourced directly by ENTSO-E or not (i.e. derived)
 generation_sensors = (
     ("Scheduled generation", "MWh", True),
@@ -122,3 +137,91 @@ def ensure_generation_sensors() -> List[Sensor]:
         sensors.append(sensor)
     db.session.commit()
     return sensors
+
+
+def prepare_dataset(forecast_generation_aggregated, forecast_generation_wind_solar):
+    """Function to prepare data for prediction."""
+
+    # Rename columns
+    forecast_generation_wind_solar.rename(
+        columns={
+            "Solar": "solar_forecast",
+            "Wind Offshore": "wind_offshore_forecast",
+            "Wind Onshore": "wind_onshore_forecast",
+        },
+        inplace=True,
+    )
+    forecast_generation_aggregated.columns = ["total_MW_scheduled_energy_forecast"]
+
+    # Merge forecast dataframes
+    day_ahead_forecast = forecast_generation_aggregated.merge(
+        forecast_generation_wind_solar, left_index=True, right_index=True
+    )
+
+    # Calculate total MW energy produced
+    day_ahead_forecast["total_MW_energy_forecast"] = day_ahead_forecast[
+        "total_MW_scheduled_energy_forecast"
+    ]
+    for energy_source in green_energy_sources:
+        day_ahead_forecast["total_MW_energy_forecast"] += day_ahead_forecast[
+            energy_source
+        ]
+
+    # Calculate features, fraction each green energy source of total
+    for energy_source in green_energy_sources:
+        day_ahead_forecast[f"fraction_{energy_source}_total_MW_energy_forecast"] = (
+            day_ahead_forecast[energy_source]
+            / day_ahead_forecast["total_MW_energy_forecast"]
+        )
+
+    # Add bias column such that we can apply matrix multiplication with model parameters
+    day_ahead_forecast["bias"] = 1
+
+    # Select feature columns from dataframe
+    features = day_ahead_forecast[
+        [
+            f"fraction_{energy_source}_total_MW_energy_forecast"
+            for energy_source in green_energy_sources
+        ]
+        + ["bias"]
+    ]
+
+    return features
+
+
+def predict(
+    forecast_generation_aggregated, forecast_generation_wind_solar, model_parameters
+):
+    """Function to predict fraction each grey energy source of total MW grey energy."""
+
+    # Calculate features
+    features = prepare_dataset(
+        forecast_generation_aggregated.copy(), forecast_generation_wind_solar.copy()
+    )
+
+    # Calculate output fully connected (linear) layer
+    output_linear_layer = compute_linear(np.array(features), np.array(model_parameters))
+
+    # Calculate output softmax layer
+    output_softmax = compute_softmax(output_linear_layer)
+
+    # Add time indices to dataframe, change column names
+    output_softmax.index = features.index
+    output_softmax.columns = [
+        grey_energy_source + "_forecast" for grey_energy_source in grey_energy_sources
+    ]
+
+    return output_softmax
+
+
+def compute_linear(features, model_parameters):
+    return np.matmul(features, model_parameters.T)
+
+
+def compute_softmax(df):
+    """Compute softmax for scores in dataframe."""
+    df_max = np.max(df, axis=1, keepdims=True)
+    e_x = np.exp(df - df_max)
+    e_x_sum = np.sum(e_x, axis=1, keepdims=True)
+
+    return pd.DataFrame(e_x / e_x_sum)

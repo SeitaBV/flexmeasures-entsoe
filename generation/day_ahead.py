@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Union
 from datetime import datetime
 import pytz
@@ -22,7 +23,7 @@ from .. import (
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 from ..utils import ensure_data_source, ensure_data_source_for_derived_data
-from .utils import ensure_generation_sensors
+from .utils import determine_net_emission_factors, ensure_generation_sensors, predict
 
 
 """
@@ -30,6 +31,8 @@ Get the CO2 content from tomorrow's generation forecasts.
 We get the overall forecast and the solar&wind forecast, so we know the share of green energy.
 For now, we'll compute the CO2 mix from some assumptions.
 """
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 # TODO: Decide which sources to use ― https://github.com/SeitaBV/flexmeasures-entsoe/issues/2
 
@@ -163,7 +166,9 @@ def import_day_ahead_generation(
     log.debug("Combined generation: \n%s" % all_generation)
 
     log.info("Computing CO2 content from the MWh values ...")
-    co2_in_kg = calculate_CO2_content_in_kg(scheduled_generation, green_generation_df)
+    co2_in_kg = calculate_CO2_content_in_kg_model_v2(
+        scheduled_generation, green_generation_df
+    )
     log.debug("Overall CO2 content (kg): \n%s" % co2_in_kg)
     forecasted_kg_CO2_per_MWh = co2_in_kg / all_generation
     log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
@@ -217,7 +222,7 @@ def import_day_ahead_generation(
             save_to_db(bdf)
 
 
-def calculate_CO2_content_in_kg(
+def calculate_CO2_content_in_kg_model_v1(
     grey_generation: pd.Series, green_generation: pd.DataFrame
 ) -> pd.Series:
     grey_CO2_intensity_factor = (  # TODO: a factor per hour of the day
@@ -249,3 +254,57 @@ def calculate_CO2_content_in_kg(
         + green_generation["wind_onshore CO2"]
         + green_generation["wind_offshore CO2"]
     )
+
+
+def calculate_CO2_content_in_kg_model_v2(
+    grey_generation: pd.Series, green_generation: pd.DataFrame
+) -> pd.Series:
+
+    model_parameters = pd.read_csv(
+        HERE + "/model_parameters.csv", header=0, index_col=0
+    )
+    predicted_grey_shares_of_grey_generation = predict(
+        grey_generation.to_frame(), green_generation, model_parameters
+    ).rename(
+        columns={
+            "Biomass_forecast": "biomass",
+            "Fossil Gas_forecast": "fossil_gas",
+            "Fossil Hard coal_forecast": "fossil_hard_coal",
+            "Nuclear_forecast": "nuclear",
+            "Other_forecast": "other",
+            "Waste_forecast": "waste",
+        }
+    )
+    total_generation = pd.concat([green_generation, grey_generation], axis=1).sum(
+        axis=1
+    )
+    predicted_grey_generation = predicted_grey_shares_of_grey_generation.mul(
+        grey_generation, axis="index"
+    )
+    predicted_grey_shares_of_total_generation = predicted_grey_generation.div(
+        total_generation, axis="index"
+    )
+    predicted_green_shares_of_total_generation = green_generation.div(
+        total_generation, axis="index"
+    ).rename(
+        columns={
+            "Solar": "solar",
+            "Wind Offshore": "wind_offshore",
+            "Wind Onshore": "wind_onshore",
+        }
+    )
+
+    predicted_shares_of_total_generation = pd.concat(
+        [
+            predicted_grey_shares_of_total_generation,
+            predicted_green_shares_of_total_generation,
+        ],
+        axis=1,
+    )
+
+    # Multiply predicted shares with emission factors
+    emission_factors = determine_net_emission_factors(
+        predicted_shares_of_total_generation
+    )
+    emissions = emission_factors.mul(total_generation, axis="index")
+    return emissions
