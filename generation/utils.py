@@ -1,6 +1,7 @@
 from typing import List
 from datetime import timedelta
 from flask import current_app
+import pandas as pd
 
 from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
 from flexmeasures.data.models.time_series import Sensor
