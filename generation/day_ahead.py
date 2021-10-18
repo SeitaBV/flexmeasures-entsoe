@@ -71,7 +71,7 @@ kg_CO2_per_MWh = dict(
     help="In dry run mode, do not save the data to the db.",
 )
 @with_appcontext
-@task_with_status_report
+@task_with_status_report("entsoe-import-day-ahead-generation")
 def import_day_ahead_generation(
     dryrun: bool = False,
     from_date: Optional[datetime] = None,
