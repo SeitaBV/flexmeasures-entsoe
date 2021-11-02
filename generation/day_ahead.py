@@ -133,6 +133,14 @@ def import_day_ahead_generation(
 
     now = server_now().astimezone(pytz.timezone(country_timezone))
     client = EntsoePandasClient(api_key=auth_token)
+
+    log.info("Getting prices ...")
+    prices: pd.Series = client.query_day_ahead_prices(
+        country_code, start=from_time, end=until_time
+    )
+    check_empty(prices)
+    log.debug("Prices: \n%s" % prices)
+
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
     scheduled_generation: pd.Series = client.query_generation_forecast(
@@ -169,6 +177,8 @@ def import_day_ahead_generation(
     log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
     def get_series_for_sensor(sensor):
+        if sensor.name == "Day-ahead prices":
+            return prices
         if sensor.name == "Scheduled generation":
             return scheduled_generation
         elif sensor.name == "Solar":
