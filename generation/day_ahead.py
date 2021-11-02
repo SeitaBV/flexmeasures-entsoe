@@ -204,15 +204,6 @@ def import_day_ahead_generation(
                 belief_time=belief_times,
             )
 
-            # Drop beliefs that haven't changed
-            bdf = bdf.groupby(level=["belief_time"], as_index=False).apply(
-                drop_unchanged_beliefs
-            )
-
-            # Work around bug in which groupby still introduces an index level, even though we asked it not to
-            if None in bdf.index.names:
-                bdf.index = bdf.index.droplevel(None)
-
             # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
             save_to_db(bdf)
 
