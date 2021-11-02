@@ -6,7 +6,7 @@ We start with data about the upcoming day.
 
 - Generation forecasts for the upcoming day
 - Based on these, CO2 content for the upcoming day
-- Prices (planned)
+- Day-ahead prices
 
 
 ## Usage

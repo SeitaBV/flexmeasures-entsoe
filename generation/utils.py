@@ -12,6 +12,7 @@ from .. import DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
 
 # sensor_name, unit, data sourced directly by ENTSO-E or not (i.e. derived)
 generation_sensors = (
+    ("Day-ahead prices", "EUR/MWh", True),
     ("Scheduled generation", "MWh", True),
     ("Solar", "MWh", True),
     ("Onshore wind", "MWh", True),
