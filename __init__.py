@@ -9,7 +9,7 @@ sys.path.insert(0, HERE)
 
 __version__ = "0.5"
 
-entsoe_data_bp = Blueprint("entsoe", __name__)
+entsoe_data_bp = Blueprint("entsoe", __name__, cli_group="entsoe")
 
 DEFAULT_COUNTRY_CODE = "NL"
 DEFAULT_COUNTRY_TIMEZONE = "Europe/Amsterdam"  # This is what we receive, even if ENTSO-E documents Europe/Brussels
