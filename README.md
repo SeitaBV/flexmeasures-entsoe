@@ -46,13 +46,13 @@ You can generate this token after you made an account at ENTSO-E, read more [her
 
 ## Testing
 
-Entso-e providesa test server (iop) for development. It's good practice not to overwhlem their production server.
+ENTSO-E provides a test server (iop) for development. It's good practice not to overwhelm their production server.
 
 Set ``ENTSOE_USE_TEST_SERVER=True`` to enable this.
 
 In that case, this plugin will look for the auth token in the config setting ``ENTSOE_AUTH_TOKEN_TEST_SERVER``.
 
-Note, however, that Entso-e usually does not seem to make the latest data available there. Asking for the next day can often get an empty response.
+Note, however, that ENTSO-E usually does not seem to make the latest data available there. Asking for the next day can often get an empty response.
 
 
 ## Development

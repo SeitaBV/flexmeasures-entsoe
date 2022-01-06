@@ -89,7 +89,7 @@ def import_day_ahead_generation(
     
     auth_token = get_auth_token_from_config_and_set_server_url()
     log.info(
-        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
+        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone: {country_timezone} ..."
     )
 
     entsoe_data_source = ensure_data_source()
@@ -156,8 +156,8 @@ def import_day_ahead_generation(
 
     if not dryrun:
         for sensor in sensors:
-            log.info(f"Saving generation data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
+            log.info(f"Saving {len(series)} beliefs for Sensor {sensor.name} ...")
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
             entsoe_source = entsoe_data_source if sensor.data_by_entsoe else derived_data_source
             save_entsoe_series(series, sensor, entsoe_source, country_timezone)

@@ -67,11 +67,15 @@ def import_day_ahead_prices(
 
     auth_token = get_auth_token_from_config_and_set_server_url()
     log.info(
-        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
+        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone: {country_timezone} ..."
     )
 
     entsoe_data_source = ensure_data_source()
+    
     from_time, until_time = parse_from_and_to_dates(from_date, to_date, country_timezone)
+    log.info(
+        f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
+    )
  
     sensors = ensure_sensors(pricing_sensors)
     # For now, we only have one pricing sensor ...
@@ -88,6 +92,6 @@ def import_day_ahead_prices(
     log.debug("Prices: \n%s" % prices)
 
     if not dryrun:
-        log.info(f"Saving data for Sensor {pricing_sensor.name} ...")
+        log.info(f"Saving {len(prices)} beliefs for Sensor {pricing_sensor.name} ...")
         prices.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
         save_entsoe_series(prices, pricing_sensor, entsoe_data_source, country_timezone)
