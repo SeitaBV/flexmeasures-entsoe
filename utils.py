@@ -8,8 +8,7 @@ import pytz
 import entsoe
 
 from flexmeasures import version
-from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures.api.common.utils.api_utils import save_to_db as deprecated_save_to_db
+from flexmeasures.data.utils import get_data_source
 from flexmeasures.data.models.time_series import Sensor
 from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
 from flexmeasures.data.models.data_sources import DataSource
@@ -169,7 +168,13 @@ def save_entsoe_series(series: pd.Series, sensor: Sensor, entsoe_source: DataSou
     # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
     # TODO: deprecate save_to_db (from api.common)
     if version("flexmeasures") < "0.8":
+        from flexmeasures.api.common.utils.api_utils import save_to_db as deprecated_save_to_db
         current_app.logger.warning("Calling flexmeasures.api.common.utils.api_utils.save_to_db is deprecated. Consider switching to FlexMeasures >= 0.8.0")
         deprecated_save_to_db(bdf)
     else:
-        save_to_db(bdf)
+        from flexmeasures.data.utils import save_to_db
+        status = save_to_db(bdf)
+        if status == "success_but_nothing_new":
+            current_app.logger.info("Done. These beliefs had already been saved before.")
+        elif status == "success_with_unchanged_beliefs_skipped":
+            current_app.logger.info("Done. Some beliefs had already been saved before.")
