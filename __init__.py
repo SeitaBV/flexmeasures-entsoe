@@ -2,7 +2,6 @@ import os
 import sys
 
 from flask import Blueprint
-import entsoe
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))

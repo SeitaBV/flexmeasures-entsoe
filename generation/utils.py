@@ -1,13 +1,4 @@
-from typing import List
-from datetime import timedelta
-from flask import current_app
 import pandas as pd
-
-from flexmeasures.data.models.time_series import Sensor
-from flexmeasures.data.config import db
-
-from .. import DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
-from ..utils import ensure_transmission_zone_asset
 
 
 def determine_net_emission_factors(shares: pd.DataFrame) -> pd.Series:
@@ -63,5 +54,3 @@ def determine_net_emission_factors(shares: pd.DataFrame) -> pd.Series:
     return shares.sum(axis=1).rename(
         "Average emissions from Dutch electricity production (kg CO₂ eq/MWh)"
     )
-
-

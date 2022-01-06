@@ -6,9 +6,6 @@ from flask.cli import with_appcontext
 from flask import current_app
 import pandas as pd
 
-import click
-from flask.cli import with_appcontext
-
 import entsoe
 from entsoe import EntsoePandasClient
 from flexmeasures.data.transactional import task_with_status_report
@@ -71,17 +68,19 @@ def import_day_ahead_prices(
     )
 
     entsoe_data_source = ensure_data_source()
-    
-    from_time, until_time = parse_from_and_to_dates(from_date, to_date, country_timezone)
+
+    from_time, until_time = parse_from_and_to_dates(
+        from_date, to_date, country_timezone
+    )
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
     )
- 
+
     sensors = ensure_sensors(pricing_sensors)
     # For now, we only have one pricing sensor ...
     pricing_sensor = sensors[0]
     assert pricing_sensor.name == "Day-ahead prices"
-    
+
     client = EntsoePandasClient(api_key=auth_token)
 
     log.info("Getting prices ...")

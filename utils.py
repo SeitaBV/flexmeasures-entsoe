@@ -16,7 +16,11 @@ from flexmeasures.utils.time_utils import server_now
 from flexmeasures.data.config import db
 from timely_beliefs import BeliefsDataFrame
 
-from . import DEFAULT_DERIVED_DATA_SOURCE, DEFAULT_COUNTRY_CODE, DEFAULT_COUNTRY_TIMEZONE  # noqa: E402
+from . import (
+    DEFAULT_DERIVED_DATA_SOURCE,
+    DEFAULT_COUNTRY_CODE,
+    DEFAULT_COUNTRY_TIMEZONE,
+)  # noqa: E402
 
 
 def ensure_data_source() -> DataSource:
@@ -28,7 +32,9 @@ def ensure_data_source() -> DataSource:
 
 def ensure_data_source_for_derived_data() -> DataSource:
     return get_data_source(
-        data_source_name=current_app.config.get("ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE),
+        data_source_name=current_app.config.get(
+            "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
+        ),
         data_source_type="forecasting script",
     )
 
@@ -74,7 +80,7 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
     timezone = current_app.config.get(
         "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
     )
-    transmission_zone = ensure_transmission_zone_asset() 
+    transmission_zone = ensure_transmission_zone_asset()
     for sensor_name, unit, data_by_entsoe in sensor_specifications:
         sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
         if not sensor:
@@ -122,7 +128,9 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
-def parse_from_and_to_dates(from_date: datetime, to_date: datetime, country_timezone: str) -> Tuple[datetime, datetime]:
+def parse_from_and_to_dates(
+    from_date: datetime, to_date: datetime, country_timezone: str
+) -> Tuple[datetime, datetime]:
     """
     Parse CLI options (or set defaults)
     Note:  entsoe-py expects time params as pd.Timestamp
@@ -146,7 +154,9 @@ def parse_from_and_to_dates(from_date: datetime, to_date: datetime, country_time
     return from_time, until_time
 
 
-def save_entsoe_series(series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str):
+def save_entsoe_series(
+    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str
+):
     """
     Save a series gotten from ENTSO-E to a Flexeasures database.
     """
@@ -168,13 +178,21 @@ def save_entsoe_series(series: pd.Series, sensor: Sensor, entsoe_source: DataSou
     # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
     # TODO: deprecate save_to_db (from api.common)
     if version("flexmeasures") < "0.8":
-        from flexmeasures.api.common.utils.api_utils import save_to_db as deprecated_save_to_db
-        current_app.logger.warning("Calling flexmeasures.api.common.utils.api_utils.save_to_db is deprecated. Consider switching to FlexMeasures >= 0.8.0")
+        from flexmeasures.api.common.utils.api_utils import (
+            save_to_db as deprecated_save_to_db,
+        )
+
+        current_app.logger.warning(
+            "Calling flexmeasures.api.common.utils.api_utils.save_to_db is deprecated. Consider switching to FlexMeasures >= 0.8.0"
+        )
         deprecated_save_to_db(bdf)
     else:
         from flexmeasures.data.utils import save_to_db
+
         status = save_to_db(bdf)
         if status == "success_but_nothing_new":
-            current_app.logger.info("Done. These beliefs had already been saved before.")
+            current_app.logger.info(
+                "Done. These beliefs had already been saved before."
+            )
         elif status == "success_with_unchanged_beliefs_skipped":
             current_app.logger.info("Done. Some beliefs had already been saved before.")
