@@ -11,12 +11,20 @@ We start with data about the upcoming day.
 
 ## Usage
 
-Importing tomorrow's generation:
+Importing tomorrow's prices:
+
+    flexmeasures entsoe import-day-ahead-prices
+
+Importing tomorrow's generation (incl. CO2 estimated content):
 
     flexmeasures entsoe import-day-ahead-generation
 
+Use ``--help`` to learn more usage details.
+
 
 ## Installation
+
+First of all, this is a FlexMeasures plugin. Consult the FlexMeasures documentation for setup.
 
 1. Add the path to this directory to your FlexMeasures (>v0.4.0) config file,
 using the `FLEXMEASURES_PLUGIN_PATHS` setting.
@@ -36,9 +44,20 @@ You can generate this token after you made an account at ENTSO-E, read more [her
 3. `pip install entsoe-py`
 
 
+## Testing
+
+ENTSO-E provides a test server (iop) for development. It's good practice not to overwhelm their production server.
+
+Set ``ENTSOE_USE_TEST_SERVER=True`` to enable this.
+
+In that case, this plugin will look for the auth token in the config setting ``ENTSOE_AUTH_TOKEN_TEST_SERVER``.
+
+Note, however, that ENTSO-E usually does not seem to make the latest data available there. Asking for the next day can often get an empty response.
+
+
 ## Development
 
-We use pre-commit to keep code quality up:
+To keep our code quality high, we use pre-commit:
 
     pip install pre-commit black flake8 mypy
     pre-commit install

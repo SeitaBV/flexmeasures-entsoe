@@ -1,6 +1,5 @@
-from typing import Optional, Union
+from typing import Optional
 from datetime import datetime
-import pytz
 
 import click
 from flask.cli import with_appcontext
@@ -10,19 +9,23 @@ from entsoe import EntsoePandasClient
 
 # from entsoe.entsoe import URL
 import pandas as pd
-from flexmeasures.utils.time_utils import server_now
-from flexmeasures.data.services.time_series import drop_unchanged_beliefs
 from flexmeasures.data.transactional import task_with_status_report
-from flexmeasures.api.common.utils.api_utils import save_to_db
-from timely_beliefs import BeliefsDataFrame
 
 from .. import (
     entsoe_data_bp,
     DEFAULT_COUNTRY_CODE,
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
-from ..utils import ensure_data_source, ensure_data_source_for_derived_data
-from .utils import ensure_generation_sensors
+from . import generation_sensors
+from ..utils import (
+    ensure_data_source,
+    ensure_data_source_for_derived_data,
+    get_auth_token_from_config_and_set_server_url,
+    abort_if_data_empty,
+    parse_from_and_to_dates,
+    save_entsoe_series,
+    ensure_sensors,
+)
 
 
 """
@@ -45,11 +48,6 @@ kg_CO2_per_MWh = dict(
     wind_onshore=14,
     wind_offshore=17,  # factor of ~ 1.1, see https://www.mdpi.com/2071-1050/10/6/2022
 )
-
-# Use this if you are testing / developing (iop is provided by ENTSO-E for this purpose)
-# You'll need a separate account & access token from ENTSO-E for this platform, though.
-# TODO: move to main __init__, and document it in Readme
-# entsoe.entsoe.URL = "https://iop-transparency.entsoe.eu/api"
 
 
 @entsoe_data_bp.cli.command("import-day-ahead-generation")
@@ -89,71 +87,38 @@ def import_day_ahead_generation(
         "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
     )
 
+    auth_token = get_auth_token_from_config_and_set_server_url()
     log.info(
-        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone {country_timezone} ..."
+        f"Will contact ENTSO-E at {entsoe.entsoe.URL}, country code: {country_code}, country timezone: {country_timezone} ..."
     )
 
     entsoe_data_source = ensure_data_source()
     derived_data_source = ensure_data_source_for_derived_data()
-    sensors = ensure_generation_sensors()
+    sensors = ensure_sensors(generation_sensors)
 
-    # Parse CLI options (or set defaults)
-    # entsoe-py expects time params as pd.Timestamp
-    if to_date is None:
-        today_start = datetime.today().replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        to_date = pd.Timestamp(
-            today_start, tzinfo=pytz.timezone(country_timezone)
-        ) + pd.offsets.DateOffset(
-            days=1
-        )  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
-    else:
-        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
-    if from_date is None:
-        from_time = to_date
-    else:
-        from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
-    until_time = to_date + pd.offsets.DateOffset(days=1)  # because to_date is inclusive
+    from_time, until_time = parse_from_and_to_dates(
+        from_date, to_date, country_timezone
+    )
+
     log.info(
         f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
     )
 
-    auth_token = current_app.config.get("ENTSOE_AUTH_TOKEN")
-    if not auth_token:
-        click.echo("Setting ENTSOE_AUTH_TOKEN seems empty!")
-        raise click.Abort
-
-    def check_empty(data: Union[pd.DataFrame, pd.Series]):
-        if data.empty:
-            click.echo(
-                "Result is empty. Probably ENTSO-E does not provide these forecasts yet ..."
-            )
-            raise click.Abort
-
-    now = server_now().astimezone(pytz.timezone(country_timezone))
     client = EntsoePandasClient(api_key=auth_token)
-
-    log.info("Getting prices ...")
-    prices: pd.Series = client.query_day_ahead_prices(
-        country_code, start=from_time, end=until_time
-    )
-    check_empty(prices)
-    log.debug("Prices: \n%s" % prices)
 
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
     scheduled_generation: pd.Series = client.query_generation_forecast(
         country_code, start=from_time, end=until_time
     )
-    check_empty(scheduled_generation)
+    abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
         country_code, start=from_time, end=until_time, psr_type=None
     )
-    check_empty(green_generation_df)
+    abort_if_data_empty(green_generation_df)
     log.debug("Green generation: \n%s" % green_generation_df)
 
     log.info("Down-sampling green energy forecast ...")
@@ -177,8 +142,6 @@ def import_day_ahead_generation(
     log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
     def get_series_for_sensor(sensor):
-        if sensor.name == "Day-ahead prices":
-            return prices
         if sensor.name == "Scheduled generation":
             return scheduled_generation
         elif sensor.name == "Solar":
@@ -195,27 +158,13 @@ def import_day_ahead_generation(
 
     if not dryrun:
         for sensor in sensors:
-            log.debug(f"Saving data for Sensor {sensor.name} ...")
             series = get_series_for_sensor(sensor)
+            log.info(f"Saving {len(series)} beliefs for Sensor {sensor.name} ...")
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
-            belief_times = (
-                (series.index.floor("D") - pd.Timedelta("6H"))
-                .to_frame(name="clipped_belief_times")
-                .clip(upper=now)
-                .set_index("clipped_belief_times")
-                .index
-            )  # published no later than D-1 18:00 Brussels time
-            bdf = BeliefsDataFrame(
-                series,
-                source=entsoe_data_source
-                if sensor.data_by_entsoe
-                else derived_data_source,
-                sensor=sensor,
-                belief_time=belief_times,
+            entsoe_source = (
+                entsoe_data_source if sensor.data_by_entsoe else derived_data_source
             )
-
-            # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
-            save_to_db(bdf)
+            save_entsoe_series(series, sensor, entsoe_source, country_timezone)
 
 
 def calculate_CO2_content_in_kg(
