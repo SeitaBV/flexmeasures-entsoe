@@ -82,7 +82,11 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
     )
     transmission_zone = ensure_transmission_zone_asset()
     for sensor_name, unit, data_by_entsoe in sensor_specifications:
-        sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
+        sensor = Sensor.query.filter(
+            Sensor.name == sensor_name,
+            Sensor.unit == unit,
+            Sensor.generic_asset == transmission_zone,
+        ).one_or_none()
         if not sensor:
             current_app.logger.info(f"Adding sensor {sensor_name} ...")
             sensor = Sensor(
