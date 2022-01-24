@@ -121,12 +121,6 @@ def import_day_ahead_generation(
     abort_if_data_empty(green_generation_df)
     log.debug("Green generation: \n%s" % green_generation_df)
 
-    log.info("Down-sampling green energy forecast ...")
-    green_generation_df = green_generation_df.resample(
-        "60T"
-    ).mean()  # ENTSO-E data is in MW
-    log.debug("Resampled green generation: \n%s" % green_generation_df)
-
     log.info("Aggregating green energy columns ...")
     all_green_generation = green_generation_df.sum(axis="columns")
     log.debug("Aggregated green generation: \n%s" % all_green_generation)
