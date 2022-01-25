@@ -78,7 +78,7 @@ def import_day_ahead_prices(
 
     sensors = ensure_sensors(pricing_sensors)
     # For now, we only have one pricing sensor ...
-    pricing_sensor = sensors[0]
+    pricing_sensor = sensors["Day-ahead prices"]
     assert pricing_sensor.name == "Day-ahead prices"
 
     client = EntsoePandasClient(api_key=auth_token)

@@ -9,6 +9,7 @@ from entsoe import EntsoePandasClient
 
 # from entsoe.entsoe import URL
 import pandas as pd
+from pandas.tseries.frequencies import to_offset
 from flexmeasures.data.transactional import task_with_status_report
 
 from .. import (
@@ -114,9 +115,14 @@ def import_day_ahead_generation(
     abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
-    if pd.infer_freq(scheduled_generation.index) != "15T":
+    inferred_frequency = pd.infer_freq(scheduled_generation.index)
+    if inferred_frequency is None:
+        raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
+    inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
+    target_resolution = sensors["Scheduled generation"].event_resolution
+    if inferred_resolution != target_resolution:
         log.debug("Up-sampling overall aggregated generation ...")
-        index = pd.date_range(from_time, until_time, freq="15T", closed="left")
+        index = pd.date_range(from_time, until_time, freq=target_resolution, closed="left")
         scheduled_generation = scheduled_generation.reindex(index).pad()
         log.debug("Resampled overall aggregated generation: \n%s" % scheduled_generation)
 
@@ -157,7 +163,7 @@ def import_day_ahead_generation(
             raise click.Abort
 
     if not dryrun:
-        for sensor in sensors:
+        for sensor in sensors.values():
             series = get_series_for_sensor(sensor)
             log.info(f"Saving {len(series)} beliefs for Sensor {sensor.name} ...")
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64

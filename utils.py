@@ -1,5 +1,5 @@
-from typing import Tuple, List, Union
-from datetime import datetime, timedelta
+from typing import Dict, Tuple, Union
+from datetime import datetime
 
 from flask import current_app
 import pandas as pd
@@ -68,14 +68,14 @@ def ensure_transmission_zone_asset() -> GenericAsset:
     return transmission_zone
 
 
-def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
+def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> Dict[str, Sensor]:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers
     generation data, then add specified sensors for relevant data we collect.
 
     If new sensors got created, the session has been flushed.
     """
-    sensors = []
+    sensors = {}
     sensors_created: bool = False
     timezone = current_app.config.get(
         "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
@@ -99,7 +99,7 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
             db.session.add(sensor)
             sensors_created = True
         sensor.data_by_entsoe = data_by_entsoe
-        sensors.append(sensor)
+        sensors[sensor_name] = sensor
     if sensors_created:
         db.session.flush()
     return sensors
