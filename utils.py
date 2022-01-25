@@ -2,6 +2,7 @@ from typing import Dict, Tuple, Union
 from datetime import datetime
 
 from flask import current_app
+from pandas.tseries.frequencies import to_offset
 import pandas as pd
 import click
 import pytz
@@ -156,6 +157,20 @@ def parse_from_and_to_dates(
         from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
     until_time = to_date + pd.offsets.DateOffset(days=1)  # because to_date is inclusive
     return from_time, until_time
+
+
+def resample_if_needed(s: pd.Series, sensor: Sensor, start: datetime, end: datetime) -> pd.Series:
+    inferred_frequency = pd.infer_freq(s.index)
+    if inferred_frequency is None:
+        raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
+    inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
+    target_resolution = sensor.event_resolution
+    if inferred_resolution != target_resolution:
+        current_app.logger.debug(f"Upsampling data for {sensor.name} ...")
+        index = pd.date_range(start, end, freq=target_resolution, closed="left")
+        s = s.reindex(index).pad()
+        current_app.logger.debug(f"Resampled data for {sensor.name}: \n%s" % s)
+    return s
 
 
 def save_entsoe_series(

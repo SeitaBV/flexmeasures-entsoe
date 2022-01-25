@@ -9,7 +9,6 @@ from entsoe import EntsoePandasClient
 
 # from entsoe.entsoe import URL
 import pandas as pd
-from pandas.tseries.frequencies import to_offset
 from flexmeasures.data.transactional import task_with_status_report
 
 from .. import (
@@ -26,6 +25,7 @@ from ..utils import (
     parse_from_and_to_dates,
     save_entsoe_series,
     ensure_sensors,
+    resample_if_needed,
 )
 
 
@@ -115,16 +115,12 @@ def import_day_ahead_generation(
     abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
-    inferred_frequency = pd.infer_freq(scheduled_generation.index)
-    if inferred_frequency is None:
-        raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
-    inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
-    target_resolution = sensors["Scheduled generation"].event_resolution
-    if inferred_resolution != target_resolution:
-        log.debug("Up-sampling overall aggregated generation ...")
-        index = pd.date_range(from_time, until_time, freq=target_resolution, closed="left")
-        scheduled_generation = scheduled_generation.reindex(index).pad()
-        log.debug("Resampled overall aggregated generation: \n%s" % scheduled_generation)
+    scheduled_generation = resample_if_needed(
+        scheduled_generation,
+        sensors["Scheduled generation"],
+        from_time,
+        until_time,
+    )
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
