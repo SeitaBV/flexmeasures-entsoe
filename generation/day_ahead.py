@@ -140,9 +140,9 @@ def import_day_ahead_generation(
             return scheduled_generation
         elif sensor.name == "Solar":
             return green_generation_df["Solar"]
-        elif sensor.name == "Onshore wind":
+        elif sensor.name == "Wind Onshore":
             return green_generation_df["Wind Onshore"]
-        elif sensor.name == "Offshore wind":
+        elif sensor.name == "Wind Offshore":
             return green_generation_df["Wind Offshore"]
         elif sensor.name == "CO₂ intensity":
             return forecasted_kg_CO2_per_MWh

@@ -4,7 +4,7 @@ from datetime import timedelta
 generation_sensors = (
     ("Scheduled generation", "MW", timedelta(minutes=15), True),
     ("Solar", "MW", timedelta(hours=1),  True),
-    ("Onshore wind", "MW", timedelta(hours=1),  True),
-    ("Offshore wind", "MW", timedelta(hours=1),  True),
+    ("Wind Onshore", "MW", timedelta(hours=1),  True),
+    ("Wind Offshore", "MW", timedelta(hours=1),  True),
     ("CO₂ intensity", "kg/MWh", timedelta(minutes=15),  False),
 )
