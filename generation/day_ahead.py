@@ -114,11 +114,11 @@ def import_day_ahead_generation(
     abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
-    log.debug("Up-sampling overall aggregated generation ...")
     if pd.infer_freq(scheduled_generation.index) != "15T":
+        log.debug("Up-sampling overall aggregated generation ...")
         index = pd.date_range(from_time, until_time, freq="15T", closed="left")
         scheduled_generation = scheduled_generation.reindex(index).pad()
-    log.debug("Resampled overall aggregated generation: \n%s" % scheduled_generation)
+        log.debug("Resampled overall aggregated generation: \n%s" % scheduled_generation)
 
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
