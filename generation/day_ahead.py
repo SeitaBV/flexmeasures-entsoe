@@ -114,26 +114,32 @@ def import_day_ahead_generation(
     abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
+    log.debug("Up-sampling overall aggregated generation ...")
+    if pd.infer_freq(scheduled_generation.index) != "15T":
+        index = pd.date_range(from_time, until_time, freq="15T", closed="left")
+        scheduled_generation = scheduled_generation.reindex(index).pad()
+    log.debug("Resampled overall aggregated generation: \n%s" % scheduled_generation)
+
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
         country_code, start=from_time, end=until_time, psr_type=None
     )
     abort_if_data_empty(green_generation_df)
-    log.debug("Green generation: \n%s" % green_generation_df)
+    log.info("Green generation: \n%s" % green_generation_df)
 
     log.info("Aggregating green energy columns ...")
     all_green_generation = green_generation_df.sum(axis="columns")
-    log.debug("Aggregated green generation: \n%s" % all_green_generation)
+    log.info("Aggregated green generation: \n%s" % all_green_generation)
 
     log.info("Computing combined generation forecast ...")
     all_generation = scheduled_generation + all_green_generation
-    log.debug("Combined generation: \n%s" % all_generation)
+    log.info("Combined generation: \n%s" % all_generation)
 
     log.info("Computing CO₂ content from the MWh values ...")
     co2_in_kg = calculate_CO2_content_in_kg(scheduled_generation, green_generation_df)
-    log.debug("Overall CO₂ content (kg): \n%s" % co2_in_kg)
+    log.info("Overall CO₂ content (kg): \n%s" % co2_in_kg)
     forecasted_kg_CO2_per_MWh = co2_in_kg / all_generation
-    log.debug("Overall CO₂ content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
+    log.info("Overall CO₂ content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
     def get_series_for_sensor(sensor):
         if sensor.name == "Scheduled generation":
@@ -169,9 +175,9 @@ def calculate_CO2_content_in_kg(
         + (grey_energy_mix["gas"] * kg_CO2_per_MWh["gas"])
         + (grey_energy_mix["oil"] * kg_CO2_per_MWh["oil"])
     )
-    current_app.logger.debug(f"Grey intensity factor: {grey_CO2_intensity_factor}")
+    current_app.logger.info(f"Grey intensity factor: {grey_CO2_intensity_factor}")
     grey_CO2_content = grey_generation * grey_CO2_intensity_factor
-    current_app.logger.debug("Grey CO₂ content (tonnes): \n%s" % grey_CO2_content)
+    current_app.logger.info("Grey CO₂ content (tonnes): \n%s" % grey_CO2_content)
 
     green_generation["solar CO₂"] = (
         green_generation["Solar"] * kg_CO2_per_MWh["solar"] / 1000.0
@@ -183,7 +189,7 @@ def calculate_CO2_content_in_kg(
         green_generation["Wind Offshore"] * kg_CO2_per_MWh["wind_offshore"]
     )
 
-    current_app.logger.debug(
+    current_app.logger.info(
         "Green generation and CO₂ content: \n%s" % green_generation
     )
 
