@@ -29,9 +29,9 @@ from ..utils import (
 
 
 """
-Get the CO2 content from tomorrow's generation forecasts.
+Get the CO₂ content from tomorrow's generation forecasts.
 We get the overall forecast and the solar&wind forecast, so we know the share of green energy.
-For now, we'll compute the CO2 mix from some assumptions.
+For now, we'll compute the CO₂ mix from some assumptions.
 """
 
 # TODO: Decide which sources to use ― https://github.com/SeitaBV/flexmeasures-entsoe/issues/2
@@ -39,7 +39,7 @@ For now, we'll compute the CO2 mix from some assumptions.
 # Source for these ratios: https://ourworldindata.org/energy/country/netherlands#what-sources-does-the-country-get-its-electricity-from (2020 data)
 grey_energy_mix = dict(gas=0.598, oil=0.045, coal=0.0718)
 
-# Source for kg CO2 per MWh: https://energy.utexas.edu/news/nuclear-and-wind-power-estimated-have-lowest-levelized-co2-emissions
+# Source for kg CO₂ per MWh: https://energy.utexas.edu/news/nuclear-and-wind-power-estimated-have-lowest-levelized-co2-emissions
 kg_CO2_per_MWh = dict(
     coal=870,  # lignite
     gas=464,  # natural
@@ -77,7 +77,7 @@ def import_day_ahead_generation(
 ):
     """
     Import forecasted generation for any date range, defaulting to tomorrow.
-    This will save overall generation, solar, offshore and onshore wind, and the estimated CO2 content per hour.
+    This will save overall generation, solar, offshore and onshore wind, and the estimated CO₂ content per hour.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
     """
@@ -129,11 +129,11 @@ def import_day_ahead_generation(
     all_generation = scheduled_generation + all_green_generation
     log.debug("Combined generation: \n%s" % all_generation)
 
-    log.info("Computing CO2 content from the MWh values ...")
+    log.info("Computing CO₂ content from the MWh values ...")
     co2_in_kg = calculate_CO2_content_in_kg(scheduled_generation, green_generation_df)
-    log.debug("Overall CO2 content (kg): \n%s" % co2_in_kg)
+    log.debug("Overall CO₂ content (kg): \n%s" % co2_in_kg)
     forecasted_kg_CO2_per_MWh = co2_in_kg / all_generation
-    log.debug("Overall CO2 content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
+    log.debug("Overall CO₂ content (kg/MWh): \n%s" % forecasted_kg_CO2_per_MWh)
 
     def get_series_for_sensor(sensor):
         if sensor.name == "Scheduled generation":
@@ -144,7 +144,7 @@ def import_day_ahead_generation(
             return green_generation_df["Wind Onshore"]
         elif sensor.name == "Offshore wind":
             return green_generation_df["Wind Offshore"]
-        elif sensor.name == "CO2 intensity":
+        elif sensor.name == "CO₂ intensity":
             return forecasted_kg_CO2_per_MWh
         else:
             log.error(f"Cannot connect data to sensor {sensor.name}.")
@@ -171,25 +171,25 @@ def calculate_CO2_content_in_kg(
     )
     current_app.logger.debug(f"Grey intensity factor: {grey_CO2_intensity_factor}")
     grey_CO2_content = grey_generation * grey_CO2_intensity_factor
-    current_app.logger.debug("Grey CO2 content (tonnes): \n%s" % grey_CO2_content)
+    current_app.logger.debug("Grey CO₂ content (tonnes): \n%s" % grey_CO2_content)
 
-    green_generation["solar CO2"] = (
+    green_generation["solar CO₂"] = (
         green_generation["Solar"] * kg_CO2_per_MWh["solar"] / 1000.0
     )
-    green_generation["wind_onshore CO2"] = (
+    green_generation["wind_onshore CO₂"] = (
         green_generation["Wind Onshore"] * kg_CO2_per_MWh["wind_onshore"]
     )
-    green_generation["wind_offshore CO2"] = (
+    green_generation["wind_offshore CO₂"] = (
         green_generation["Wind Offshore"] * kg_CO2_per_MWh["wind_offshore"]
     )
 
     current_app.logger.debug(
-        "Green generation and CO2 content: \n%s" % green_generation
+        "Green generation and CO₂ content: \n%s" % green_generation
     )
 
     return (
         grey_CO2_content
-        + green_generation["solar CO2"]
-        + green_generation["wind_onshore CO2"]
-        + green_generation["wind_offshore CO2"]
+        + green_generation["solar CO₂"]
+        + green_generation["wind_onshore CO₂"]
+        + green_generation["wind_offshore CO₂"]
     )

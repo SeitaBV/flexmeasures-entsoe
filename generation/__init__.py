@@ -6,5 +6,5 @@ generation_sensors = (
     ("Solar", "MW", timedelta(hours=1),  True),
     ("Onshore wind", "MW", timedelta(hours=1),  True),
     ("Offshore wind", "MW", timedelta(hours=1),  True),
-    ("CO2 intensity", "kg/MWh", timedelta(minutes=15),  False),
+    ("CO₂ intensity", "kg/MWh", timedelta(minutes=15),  False),
 )
