@@ -165,11 +165,16 @@ def resample_if_needed(s: pd.Series, sensor: Sensor, start: datetime, end: datet
         raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
     inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
     target_resolution = sensor.event_resolution
-    if inferred_resolution != target_resolution:
+    if inferred_resolution == target_resolution:
+        return s
+    elif inferred_resolution > target_resolution:
         current_app.logger.debug(f"Upsampling data for {sensor.name} ...")
         index = pd.date_range(start, end, freq=target_resolution, closed="left")
         s = s.reindex(index).pad()
-        current_app.logger.debug(f"Resampled data for {sensor.name}: \n%s" % s)
+    elif inferred_resolution < target_resolution:
+        current_app.logger.debug(f"Downsampling data for {sensor.name} ...")
+        s = s.resample(target_resolution).mean()
+    current_app.logger.debug(f"Resampled data for {sensor.name}: \n%s" % s)
     return s
 
 
