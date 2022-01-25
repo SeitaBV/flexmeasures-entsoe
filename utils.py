@@ -159,7 +159,7 @@ def parse_from_and_to_dates(
     return from_time, until_time
 
 
-def resample_if_needed(s: pd.Series, sensor: Sensor, start: datetime, end: datetime) -> pd.Series:
+def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
     inferred_frequency = pd.infer_freq(s.index)
     if inferred_frequency is None:
         raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
@@ -169,7 +169,7 @@ def resample_if_needed(s: pd.Series, sensor: Sensor, start: datetime, end: datet
         return s
     elif inferred_resolution > target_resolution:
         current_app.logger.debug(f"Upsampling data for {sensor.name} ...")
-        index = pd.date_range(start, end, freq=target_resolution, closed="left")
+        index = pd.date_range(s.index[0], s.index[-1] + inferred_resolution, freq=target_resolution, closed="left")
         s = s.reindex(index).pad()
     elif inferred_resolution < target_resolution:
         current_app.logger.debug(f"Downsampling data for {sensor.name} ...")

@@ -118,8 +118,6 @@ def import_day_ahead_generation(
     scheduled_generation = resample_if_needed(
         scheduled_generation,
         sensors["Scheduled generation"],
-        from_time,
-        until_time,
     )
 
     log.info("Getting green generation ...")
