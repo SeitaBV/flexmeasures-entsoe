@@ -7,7 +7,7 @@ from flask import Blueprint
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-__version__ = "0.4"
+__version__ = "0.5"
 
 entsoe_data_bp = Blueprint("entsoe", __name__)
 

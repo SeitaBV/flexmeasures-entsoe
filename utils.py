@@ -81,8 +81,12 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
         "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
     )
     transmission_zone = ensure_transmission_zone_asset()
-    for sensor_name, unit, data_by_entsoe in sensor_specifications:
-        sensor = Sensor.query.filter(Sensor.name == sensor_name).one_or_none()
+    for sensor_name, unit, event_resolution, data_by_entsoe in sensor_specifications:
+        sensor = Sensor.query.filter(
+            Sensor.name == sensor_name,
+            Sensor.unit == unit,
+            Sensor.generic_asset == transmission_zone,
+        ).one_or_none()
         if not sensor:
             current_app.logger.info(f"Adding sensor {sensor_name} ...")
             sensor = Sensor(
@@ -90,7 +94,7 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> List[Sensor]:
                 unit=unit,
                 generic_asset=transmission_zone,
                 timezone=timezone,
-                event_resolution=timedelta(hours=1),
+                event_resolution=event_resolution,
             )
             db.session.add(sensor)
             sensors_created = True
