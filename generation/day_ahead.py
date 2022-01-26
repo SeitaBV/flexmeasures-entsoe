@@ -25,6 +25,7 @@ from ..utils import (
     parse_from_and_to_dates,
     save_entsoe_series,
     ensure_sensors,
+    resample_if_needed,
 )
 
 
@@ -114,6 +115,11 @@ def import_day_ahead_generation(
     abort_if_data_empty(scheduled_generation)
     log.debug("Overall aggregated generation: \n%s" % scheduled_generation)
 
+    scheduled_generation = resample_if_needed(
+        scheduled_generation,
+        sensors["Scheduled generation"],
+    )
+
     log.info("Getting green generation ...")
     green_generation_df: pd.DataFrame = client.query_wind_and_solar_forecast(
         country_code, start=from_time, end=until_time, psr_type=None
@@ -151,7 +157,7 @@ def import_day_ahead_generation(
             raise click.Abort
 
     if not dryrun:
-        for sensor in sensors:
+        for sensor in sensors.values():
             series = get_series_for_sensor(sensor)
             log.info(f"Saving {len(series)} beliefs for Sensor {sensor.name} ...")
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
