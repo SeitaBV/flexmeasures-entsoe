@@ -3,6 +3,7 @@ import pandas as pd
 
 def determine_net_emission_factors(shares: pd.DataFrame) -> pd.Series:
     """Given production shares, determine the net emission factors.
+    Or given production by type, determine the net emissions.
 
     Use column headers that match production types listed below.
     Use any index.
