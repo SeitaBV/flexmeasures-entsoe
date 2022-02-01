@@ -18,7 +18,7 @@ from .. import (
 )  # noqa: E402
 from ..utils import (
     ensure_data_source,
-    parse_from_and_to_dates,
+    parse_from_and_to_dates_default_tomorrow,
     ensure_sensors,
     save_entsoe_series,
     get_auth_token_from_config_and_set_server_url,
@@ -69,7 +69,7 @@ def import_day_ahead_prices(
 
     entsoe_data_source = ensure_data_source()
 
-    from_time, until_time = parse_from_and_to_dates(
+    from_time, until_time = parse_from_and_to_dates_default_tomorrow(
         from_date, to_date, country_timezone
     )
     log.info(
