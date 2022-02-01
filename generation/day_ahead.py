@@ -72,12 +72,26 @@ kg_CO2_per_MWh = dict(
     default=False,
     help="In dry run mode, do not save the data to the db.",
 )
+@click.option(
+    "--country",
+    "country_code",
+    required=False,
+    help="ENTSO-E country code (such as BE, DE, FR or NL).",
+)
+@click.option(
+    "--timezone",
+    "country_timezone",
+    required=False,
+    help="Timezone for the country (such as 'Europe/Amsterdam').",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-generation")
 def import_day_ahead_generation(
     dryrun: bool = False,
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
+    country_code: Optional[str] = None,
+    country_timezone: Optional[str] = None,
 ):
     """
     Import forecasted generation for any date range, defaulting to tomorrow.
@@ -85,10 +99,11 @@ def import_day_ahead_generation(
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
     """
-    country_code, country_timezone = ensure_country_code_and_timezone()
+    # Set up FlexMeasures data structure
+    country_code, country_timezone = ensure_country_code_and_timezone(country_code, country_timezone)
     entsoe_data_source = ensure_data_source()
     derived_data_source = ensure_data_source_for_derived_data()
-    sensors = ensure_sensors(generation_sensors)
+    sensors = ensure_sensors(generation_sensors, country_code, country_timezone)
 
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_tomorrow(

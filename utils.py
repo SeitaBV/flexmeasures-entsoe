@@ -42,11 +42,10 @@ def ensure_data_source_for_derived_data() -> DataSource:
     )
 
 
-def ensure_transmission_zone_asset() -> GenericAsset:
+def ensure_transmission_zone_asset(country_code: str) -> GenericAsset:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers data.
     """
-    country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
     transmission_zone_type = GenericAssetType.query.filter(
         GenericAssetType.name == "transmission zone"
     ).one_or_none()
@@ -71,7 +70,11 @@ def ensure_transmission_zone_asset() -> GenericAsset:
     return transmission_zone
 
 
-def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> Dict[str, Sensor]:
+def ensure_sensors(
+    sensor_specifications: Tuple[Tuple],
+    country_code: str,
+    timezone: str,
+) -> Dict[str, Sensor]:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers
     generation data, then add specified sensors for relevant data we collect.
@@ -80,10 +83,7 @@ def ensure_sensors(sensor_specifications: Tuple[Tuple]) -> Dict[str, Sensor]:
     """
     sensors = {}
     sensors_created: bool = False
-    timezone = current_app.config.get(
-        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
-    )
-    transmission_zone = ensure_transmission_zone_asset()
+    transmission_zone = ensure_transmission_zone_asset(country_code)
     for sensor_name, unit, event_resolution, data_by_entsoe in sensor_specifications:
         sensor = Sensor.query.filter(
             Sensor.name == sensor_name,
@@ -127,11 +127,16 @@ def get_auth_token_from_config_and_set_server_url() -> str:
     return auth_token
 
 
-def ensure_country_code_and_timezone() -> Tuple[str, str]:
-    country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    country_timezone = current_app.config.get(
-        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
-    )
+def ensure_country_code_and_timezone(
+    country_code: Optional[str] = None,
+    country_timezone: Optional[str] = None,
+) -> Tuple[str, str]:
+    if country_code is None:
+        country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+    if country_timezone is None:
+        country_timezone = current_app.config.get(
+            "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
+        )
     return country_code, country_timezone
 
 
