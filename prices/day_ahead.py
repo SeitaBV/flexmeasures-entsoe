@@ -64,7 +64,11 @@ def import_day_ahead_prices(
 
     auth_token = get_auth_token_from_config_and_set_server_url()
 
+    sensors = ensure_sensors(pricing_sensors)
     entsoe_data_source = ensure_data_source()
+    # For now, we only have one pricing sensor ...
+    pricing_sensor = sensors["Day-ahead prices"]
+    assert pricing_sensor.name == "Day-ahead prices"
 
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_tomorrow(
@@ -73,12 +77,6 @@ def import_day_ahead_prices(
 
     # Start import
     log, now = start_import_log("day-ahead price", from_time, until_time, country_code, country_timezone)
-
-    sensors = ensure_sensors(pricing_sensors)
-    # For now, we only have one pricing sensor ...
-    pricing_sensor = sensors["Day-ahead prices"]
-    assert pricing_sensor.name == "Day-ahead prices"
-
     client = EntsoePandasClient(api_key=auth_token)
 
     log.info("Getting prices ...")
