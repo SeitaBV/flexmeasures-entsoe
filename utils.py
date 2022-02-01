@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Tuple, Union
 from datetime import datetime
+from logging import Logger
 
 from flask import current_app
 from pandas.tseries.frequencies import to_offset
@@ -260,3 +261,18 @@ def date_range_to_time_range(
 ) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """Because to_date is inclusive, we add one calendar day."""
     return from_date, to_date + pd.offsets.DateOffset(days=1)
+
+
+def start_import_log(
+    import_type: str,
+    from_time: pd.Timestamp,
+    until_time: pd.Timestamp,
+    country_code: str,
+    country_timezone: str
+) -> Tuple[Logger, datetime]:
+    log = current_app.logger
+    log.info(
+        f"Importing {import_type} data for {country_code} (timezone {country_timezone}), starting at {from_time}, up until {until_time}, from ENTSO-E at {entsoe.entsoe.URL} ..."
+    )
+    now = server_now().astimezone(pytz.timezone(country_timezone))
+    return log, now
