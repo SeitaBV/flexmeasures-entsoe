@@ -2,6 +2,7 @@ from typing import Dict, Optional, Tuple, Union
 from datetime import datetime
 from logging import Logger
 
+from entsoe import EntsoePandasClient
 from flask import current_app
 from pandas.tseries.frequencies import to_offset
 import pandas as pd
@@ -124,6 +125,20 @@ def get_auth_token_from_config_and_set_server_url() -> str:
         click.echo("Setting ENTSOE_AUTH_TOKEN seems empty!")
         raise click.Abort
     return auth_token
+
+
+def ensure_country_code_and_timezone() -> Tuple[str, str]:
+    country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+    country_timezone = current_app.config.get(
+        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
+    )
+    return country_code, country_timezone
+
+
+def create_entsoe_client() -> EntsoePandasClient:
+    auth_token = get_auth_token_from_config_and_set_server_url()
+    client = EntsoePandasClient(api_key=auth_token)
+    return client
 
 
 def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):

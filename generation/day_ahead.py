@@ -18,6 +18,8 @@ from .. import (
 )  # noqa: E402
 from . import generation_sensors
 from ..utils import (
+    create_entsoe_client,
+    ensure_country_code_and_timezone,
     ensure_data_source,
     ensure_data_source_for_derived_data,
     get_auth_token_from_config_and_set_server_url,
@@ -83,13 +85,7 @@ def import_day_ahead_generation(
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
     """
-    country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
-    country_timezone = current_app.config.get(
-        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
-    )
-
-    auth_token = get_auth_token_from_config_and_set_server_url()
-
+    country_code, country_timezone = ensure_country_code_and_timezone()
     entsoe_data_source = ensure_data_source()
     derived_data_source = ensure_data_source_for_derived_data()
     sensors = ensure_sensors(generation_sensors)
@@ -100,8 +96,8 @@ def import_day_ahead_generation(
     )
 
     # Start import
+    client = create_entsoe_client()
     log, now = start_import_log("day-ahead generation", from_time, until_time, country_code, country_timezone)
-    client = EntsoePandasClient(api_key=auth_token)
 
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)
