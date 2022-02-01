@@ -1,6 +1,8 @@
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 from datetime import datetime
+from logging import Logger
 
+from entsoe import EntsoePandasClient
 from flask import current_app
 from pandas.tseries.frequencies import to_offset
 import pandas as pd
@@ -125,6 +127,20 @@ def get_auth_token_from_config_and_set_server_url() -> str:
     return auth_token
 
 
+def ensure_country_code_and_timezone() -> Tuple[str, str]:
+    country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+    country_timezone = current_app.config.get(
+        "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
+    )
+    return country_code, country_timezone
+
+
+def create_entsoe_client() -> EntsoePandasClient:
+    auth_token = get_auth_token_from_config_and_set_server_url()
+    client = EntsoePandasClient(api_key=auth_token)
+    return client
+
+
 def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
     if data.empty:
         click.echo(
@@ -133,11 +149,11 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
-def parse_from_and_to_dates(
-    from_date: datetime, to_date: datetime, country_timezone: str
+def parse_from_and_to_dates_default_tomorrow(
+    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
 ) -> Tuple[datetime, datetime]:
     """
-    Parse CLI options (or set defaults)
+    Parse CLI options (or set default to tomorrow)
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     if to_date is None:
@@ -152,24 +168,57 @@ def parse_from_and_to_dates(
     else:
         to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
     if from_date is None:
-        from_time = to_date
+        from_date = to_date
     else:
-        from_time = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
-    until_time = to_date + pd.offsets.DateOffset(days=1)  # because to_date is inclusive
+        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
+    from_time, until_time = date_range_to_time_range(from_date, to_date)
+    return from_time, until_time
+
+
+def parse_from_and_to_dates_default_yesterday(
+    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
+) -> Tuple[datetime, datetime]:
+    """
+    Parse CLI options (or set default to yesterday)
+    Note:  entsoe-py expects time params as pd.Timestamp
+    """
+    if from_date is None:
+        today_start = datetime.today().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        from_date = pd.Timestamp(
+            today_start, tzinfo=pytz.timezone(country_timezone)
+        ) - pd.offsets.DateOffset(
+            days=1
+        )  # Deduct a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
+    else:
+        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
+    if to_date is None:
+        to_date = from_date
+    else:
+        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
+    from_time, until_time = date_range_to_time_range(from_date, to_date)
     return from_time, until_time
 
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
     inferred_frequency = pd.infer_freq(s.index)
     if inferred_frequency is None:
-        raise ValueError("Data has no discernible frequency from which to derive an event resolution.")
+        raise ValueError(
+            "Data has no discernible frequency from which to derive an event resolution."
+        )
     inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
     target_resolution = sensor.event_resolution
     if inferred_resolution == target_resolution:
         return s
     elif inferred_resolution > target_resolution:
         current_app.logger.debug(f"Upsampling data for {sensor.name} ...")
-        index = pd.date_range(s.index[0], s.index[-1] + inferred_resolution, freq=target_resolution, closed="left")
+        index = pd.date_range(
+            s.index[0],
+            s.index[-1] + inferred_resolution,
+            freq=target_resolution,
+            closed="left",
+        )
         s = s.reindex(index).pad()
     elif inferred_resolution < target_resolution:
         current_app.logger.debug(f"Downsampling data for {sensor.name} ...")
@@ -179,12 +228,13 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
 
 
 def save_entsoe_series(
-    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str
+    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str, now: Optional[datetime] = None
 ):
     """
     Save a series gotten from ENTSO-E to a Flexeasures database.
     """
-    now = server_now().astimezone(pytz.timezone(country_timezone))
+    if not now:
+        now = server_now().astimezone(pytz.timezone(country_timezone))
     belief_times = (
         (series.index.floor("D") - pd.Timedelta("6H"))
         .to_frame(name="clipped_belief_times")
@@ -220,3 +270,25 @@ def save_entsoe_series(
             )
         elif status == "success_with_unchanged_beliefs_skipped":
             current_app.logger.info("Done. Some beliefs had already been saved before.")
+
+
+def date_range_to_time_range(
+    from_date: pd.Timestamp, to_date: pd.Timestamp
+) -> Tuple[pd.Timestamp, pd.Timestamp]:
+    """Because to_date is inclusive, we add one calendar day."""
+    return from_date, to_date + pd.offsets.DateOffset(days=1)
+
+
+def start_import_log(
+    import_type: str,
+    from_time: pd.Timestamp,
+    until_time: pd.Timestamp,
+    country_code: str,
+    country_timezone: str
+) -> Tuple[Logger, datetime]:
+    log = current_app.logger
+    log.info(
+        f"Importing {import_type} data for {country_code} (timezone {country_timezone}), starting at {from_time}, up until {until_time}, from ENTSO-E at {entsoe.entsoe.URL} ..."
+    )
+    now = server_now().astimezone(pytz.timezone(country_timezone))
+    return log, now
