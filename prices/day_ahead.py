@@ -91,4 +91,4 @@ def import_day_ahead_prices(
     if not dryrun:
         log.info(f"Saving {len(prices)} beliefs for Sensor {pricing_sensor.name} ...")
         prices.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
-        save_entsoe_series(prices, pricing_sensor, entsoe_data_source, country_timezone)
+        save_entsoe_series(prices, pricing_sensor, entsoe_data_source, country_timezone, now)

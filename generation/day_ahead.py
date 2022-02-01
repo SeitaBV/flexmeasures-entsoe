@@ -160,7 +160,7 @@ def import_day_ahead_generation(
             entsoe_source = (
                 entsoe_data_source if sensor.data_by_entsoe else derived_data_source
             )
-            save_entsoe_series(series, sensor, entsoe_source, country_timezone)
+            save_entsoe_series(series, sensor, entsoe_source, country_timezone, now)
 
 
 def calculate_CO2_content_in_kg(

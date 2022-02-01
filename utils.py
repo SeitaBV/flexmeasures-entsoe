@@ -213,12 +213,13 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
 
 
 def save_entsoe_series(
-    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str
+    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str, now: Optional[datetime] = None
 ):
     """
     Save a series gotten from ENTSO-E to a Flexeasures database.
     """
-    now = server_now().astimezone(pytz.timezone(country_timezone))
+    if not now:
+        now = server_now().astimezone(pytz.timezone(country_timezone))
     belief_times = (
         (series.index.floor("D") - pd.Timedelta("6H"))
         .to_frame(name="clipped_belief_times")
