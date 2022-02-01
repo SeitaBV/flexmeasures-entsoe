@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 from datetime import datetime
 
 from flask import current_app
@@ -134,10 +134,10 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
 
 
 def parse_from_and_to_dates(
-    from_date: datetime, to_date: datetime, country_timezone: str
+    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
 ) -> Tuple[datetime, datetime]:
     """
-    Parse CLI options (or set defaults)
+    Parse CLI options (or set default to tomorrow)
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     if to_date is None:
