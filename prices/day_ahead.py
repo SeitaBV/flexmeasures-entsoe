@@ -73,7 +73,7 @@ def import_day_ahead_prices(
         from_date, to_date, country_timezone
     )
     log.info(
-        f"Importing generation data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
+        f"Importing price data from ENTSO-E, starting at {from_time}, up until {until_time} ..."
     )
 
     sensors = ensure_sensors(pricing_sensors)
