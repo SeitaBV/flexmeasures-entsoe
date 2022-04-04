@@ -166,7 +166,7 @@ def import_day_ahead_generation(
     if not dryrun:
         for sensor in sensors.values():
             series = get_series_for_sensor(sensor)
-            log.info(f"Saving {len(series)} beliefs for Sensor {sensor.name} ...")
+            log.info(f"Saving {len(series)} beliefs for {sensor} ...")
             series.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
             entsoe_source = (
                 entsoe_data_source if sensor.data_by_entsoe else derived_data_source
