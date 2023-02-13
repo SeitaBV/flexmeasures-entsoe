@@ -120,7 +120,7 @@ def get_auth_token_from_config_and_set_server_url() -> str:
         entsoe.entsoe.URL = "https://iop-transparency.entsoe.eu/api"
     else:
         auth_token = current_app.config.get("ENTSOE_AUTH_TOKEN")
-        entsoe.entsoe.URL = "https://transparency.entsoe.eu/api"
+        entsoe.entsoe.URL = "https://web-api.tp.entsoe.eu/api"
     if not auth_token:
         click.echo("Setting ENTSOE_AUTH_TOKEN seems empty!")
         raise click.Abort
@@ -236,7 +236,7 @@ def save_entsoe_series(
     series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str, now: Optional[datetime] = None
 ):
     """
-    Save a series gotten from ENTSO-E to a Flexeasures database.
+    Save a series gotten from ENTSO-E to a FlexMeasures database.
     """
     if not now:
         now = server_now().astimezone(pytz.timezone(country_timezone))
