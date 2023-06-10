@@ -10,13 +10,10 @@ import click
 import pytz
 import entsoe
 
-from flexmeasures import version
-from flexmeasures.data.utils import get_data_source
-from flexmeasures.data.models.time_series import Sensor
-from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
-from flexmeasures.data.models.data_sources import DataSource
+from flexmeasures.data.utils import get_data_source, save_to_db
+from flexmeasures import Asset, AssetType, Sensor, Source
+from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
-from flexmeasures.data.config import db
 from timely_beliefs import BeliefsDataFrame
 
 from . import (
@@ -26,14 +23,14 @@ from . import (
 )  # noqa: E402
 
 
-def ensure_data_source() -> DataSource:
+def ensure_data_source() -> Source:
     return get_data_source(
         data_source_name="ENTSO-E",
         data_source_type="forecasting script",
     )
 
 
-def ensure_data_source_for_derived_data() -> DataSource:
+def ensure_data_source_for_derived_data() -> Source:
     return get_data_source(
         data_source_name=current_app.config.get(
             "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
@@ -42,27 +39,25 @@ def ensure_data_source_for_derived_data() -> DataSource:
     )
 
 
-def ensure_transmission_zone_asset(country_code: str) -> GenericAsset:
+def ensure_transmission_zone_asset(country_code: str) -> Asset:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers data.
     """
-    transmission_zone_type = GenericAssetType.query.filter(
-        GenericAssetType.name == "transmission zone"
+    transmission_zone_type = AssetType.query.filter(
+        AssetType.name == "transmission zone"
     ).one_or_none()
     if not transmission_zone_type:
         current_app.logger.info("Adding transmission zone type ...")
-        transmission_zone_type = GenericAssetType(
+        transmission_zone_type = AssetType(
             name="transmission zone",
             description="A grid regulated & balanced as a whole, usually a national grid.",
         )
         db.session.add(transmission_zone_type)
     ga_name = f"{country_code} transmission zone"
-    transmission_zone = GenericAsset.query.filter(
-        GenericAsset.name == ga_name
-    ).one_or_none()
+    transmission_zone = Asset.query.filter(Asset.name == ga_name).one_or_none()
     if not transmission_zone:
         current_app.logger.info(f"Adding {ga_name} ...")
-        transmission_zone = GenericAsset(
+        transmission_zone = Asset(
             name=ga_name,
             generic_asset_type=transmission_zone_type,
             account_id=None,  # public
@@ -132,7 +127,9 @@ def ensure_country_code_and_timezone(
     country_timezone: Optional[str] = None,
 ) -> Tuple[str, str]:
     if country_code is None:
-        country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+        country_code = current_app.config.get(
+            "ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE
+        )
     if country_timezone is None:
         country_timezone = current_app.config.get(
             "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
@@ -233,7 +230,11 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
 
 
 def save_entsoe_series(
-    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str, now: Optional[datetime] = None
+    series: pd.Series,
+    sensor: Sensor,
+    entsoe_source: Source,
+    country_timezone: str,
+    now: Optional[datetime] = None,
 ):
     """
     Save a series gotten from ENTSO-E to a FlexMeasures database.
@@ -255,26 +256,11 @@ def save_entsoe_series(
     )
 
     # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
-    # TODO: deprecate save_to_db (from api.common)
-    if version("flexmeasures") < "0.8":
-        from flexmeasures.api.common.utils.api_utils import (
-            save_to_db as deprecated_save_to_db,
-        )
-
-        current_app.logger.warning(
-            "Calling flexmeasures.api.common.utils.api_utils.save_to_db is deprecated. Consider switching to FlexMeasures >= 0.8.0"
-        )
-        deprecated_save_to_db(bdf)
-    else:
-        from flexmeasures.data.utils import save_to_db
-
-        status = save_to_db(bdf)
-        if status == "success_but_nothing_new":
-            current_app.logger.info(
-                "Done. These beliefs had already been saved before."
-            )
-        elif status == "success_with_unchanged_beliefs_skipped":
-            current_app.logger.info("Done. Some beliefs had already been saved before.")
+    status = save_to_db(bdf)
+    if status == "success_but_nothing_new":
+        current_app.logger.info("Done. These beliefs had already been saved before.")
+    elif status == "success_with_unchanged_beliefs_skipped":
+        current_app.logger.info("Done. Some beliefs had already been saved before.")
 
 
 def date_range_to_time_range(
@@ -289,7 +275,7 @@ def start_import_log(
     from_time: pd.Timestamp,
     until_time: pd.Timestamp,
     country_code: str,
-    country_timezone: str
+    country_timezone: str,
 ) -> Tuple[Logger, datetime]:
     log = current_app.logger
     log.info(
