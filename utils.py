@@ -11,11 +11,9 @@ import pytz
 import entsoe
 
 from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures.data.models.time_series import Sensor
-from flexmeasures.data.models.generic_assets import GenericAsset, GenericAssetType
-from flexmeasures.data.models.data_sources import DataSource
+from flexmeasures import Asset, AssetType, Sensor, Source
+from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
-from flexmeasures.data.config import db
 from timely_beliefs import BeliefsDataFrame
 
 from . import (
@@ -25,14 +23,14 @@ from . import (
 )  # noqa: E402
 
 
-def ensure_data_source() -> DataSource:
+def ensure_data_source() -> Source:
     return get_data_source(
         data_source_name="ENTSO-E",
         data_source_type="forecasting script",
     )
 
 
-def ensure_data_source_for_derived_data() -> DataSource:
+def ensure_data_source_for_derived_data() -> Source:
     return get_data_source(
         data_source_name=current_app.config.get(
             "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
@@ -41,27 +39,27 @@ def ensure_data_source_for_derived_data() -> DataSource:
     )
 
 
-def ensure_transmission_zone_asset(country_code: str) -> GenericAsset:
+def ensure_transmission_zone_asset(country_code: str) -> Asset:
     """
     Ensure a GenericAsset exists to model the transmission zone for which this plugin gathers data.
     """
-    transmission_zone_type = GenericAssetType.query.filter(
-        GenericAssetType.name == "transmission zone"
+    transmission_zone_type = AssetType.query.filter(
+        AssetType.name == "transmission zone"
     ).one_or_none()
     if not transmission_zone_type:
         current_app.logger.info("Adding transmission zone type ...")
-        transmission_zone_type = GenericAssetType(
+        transmission_zone_type = AssetType(
             name="transmission zone",
             description="A grid regulated & balanced as a whole, usually a national grid.",
         )
         db.session.add(transmission_zone_type)
     ga_name = f"{country_code} transmission zone"
-    transmission_zone = GenericAsset.query.filter(
-        GenericAsset.name == ga_name
+    transmission_zone = Asset.query.filter(
+        Asset.name == ga_name
     ).one_or_none()
     if not transmission_zone:
         current_app.logger.info(f"Adding {ga_name} ...")
-        transmission_zone = GenericAsset(
+        transmission_zone = Asset(
             name=ga_name,
             generic_asset_type=transmission_zone_type,
             account_id=None,  # public
@@ -232,7 +230,7 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
 
 
 def save_entsoe_series(
-    series: pd.Series, sensor: Sensor, entsoe_source: DataSource, country_timezone: str, now: Optional[datetime] = None
+    series: pd.Series, sensor: Sensor, entsoe_source: Source, country_timezone: str, now: Optional[datetime] = None
 ):
     """
     Save a series gotten from ENTSO-E to a FlexMeasures database.
