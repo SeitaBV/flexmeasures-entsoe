@@ -54,9 +54,7 @@ def ensure_transmission_zone_asset(country_code: str) -> Asset:
         )
         db.session.add(transmission_zone_type)
     ga_name = f"{country_code} transmission zone"
-    transmission_zone = Asset.query.filter(
-        Asset.name == ga_name
-    ).one_or_none()
+    transmission_zone = Asset.query.filter(Asset.name == ga_name).one_or_none()
     if not transmission_zone:
         current_app.logger.info(f"Adding {ga_name} ...")
         transmission_zone = Asset(
@@ -129,7 +127,9 @@ def ensure_country_code_and_timezone(
     country_timezone: Optional[str] = None,
 ) -> Tuple[str, str]:
     if country_code is None:
-        country_code = current_app.config.get("ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE)
+        country_code = current_app.config.get(
+            "ENTSOE_COUNTRY_CODE", DEFAULT_COUNTRY_CODE
+        )
     if country_timezone is None:
         country_timezone = current_app.config.get(
             "ENTSOE_COUNTRY_TIMEZONE", DEFAULT_COUNTRY_TIMEZONE
@@ -230,7 +230,11 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
 
 
 def save_entsoe_series(
-    series: pd.Series, sensor: Sensor, entsoe_source: Source, country_timezone: str, now: Optional[datetime] = None
+    series: pd.Series,
+    sensor: Sensor,
+    entsoe_source: Source,
+    country_timezone: str,
+    now: Optional[datetime] = None,
 ):
     """
     Save a series gotten from ENTSO-E to a FlexMeasures database.
@@ -254,9 +258,7 @@ def save_entsoe_series(
     # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
     status = save_to_db(bdf)
     if status == "success_but_nothing_new":
-        current_app.logger.info(
-            "Done. These beliefs had already been saved before."
-        )
+        current_app.logger.info("Done. These beliefs had already been saved before.")
     elif status == "success_with_unchanged_beliefs_skipped":
         current_app.logger.info("Done. Some beliefs had already been saved before.")
 
@@ -273,7 +275,7 @@ def start_import_log(
     from_time: pd.Timestamp,
     until_time: pd.Timestamp,
     country_code: str,
-    country_timezone: str
+    country_timezone: str,
 ) -> Tuple[Logger, datetime]:
     log = current_app.logger
     log.info(
