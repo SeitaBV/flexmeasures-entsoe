@@ -94,7 +94,7 @@ def import_day_ahead_generation(
     country_timezone: Optional[str] = None,
 ):
     """
-    Import forecasted generation for any date range, defaulting to tomorrow.
+    Import forecasted generation for any date range, defaulting to today and tomorrow.
     This will save overall generation, solar, offshore and onshore wind, and the estimated CO₂ content per hour.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
