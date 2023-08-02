@@ -4,8 +4,6 @@ from datetime import datetime
 import click
 from flask.cli import with_appcontext
 from flask import current_app
-import entsoe
-from entsoe import EntsoePandasClient
 
 # from entsoe.entsoe import URL
 import pandas as pd
@@ -13,8 +11,6 @@ from flexmeasures.data.transactional import task_with_status_report
 
 from .. import (
     entsoe_data_bp,
-    DEFAULT_COUNTRY_CODE,
-    DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 from . import generation_sensors
 from ..utils import (
@@ -22,7 +18,6 @@ from ..utils import (
     ensure_country_code_and_timezone,
     ensure_data_source,
     ensure_data_source_for_derived_data,
-    get_auth_token_from_config_and_set_server_url,
     abort_if_data_empty,
     parse_from_and_to_dates_default_today_and_tomorrow,
     save_entsoe_series,
@@ -100,11 +95,12 @@ def import_day_ahead_generation(
     when tomorrow's prices are announced.
     """
     # Set up FlexMeasures data structure
-    country_code, country_timezone = ensure_country_code_and_timezone(country_code, country_timezone)
+    country_code, country_timezone = ensure_country_code_and_timezone(
+        country_code, country_timezone
+    )
     entsoe_data_source = ensure_data_source()
     derived_data_source = ensure_data_source_for_derived_data()
     sensors = ensure_sensors(generation_sensors, country_code, country_timezone)
-
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
         from_date, to_date, country_timezone
@@ -112,7 +108,9 @@ def import_day_ahead_generation(
 
     # Start import
     client = create_entsoe_client()
-    log, now = start_import_log("day-ahead generation", from_time, until_time, country_code, country_timezone)
+    log, now = start_import_log(
+        "day-ahead generation", from_time, until_time, country_code, country_timezone
+    )
 
     log.info("Getting scheduled generation ...")
     # We assume that the green (solar & wind) generation is not included in this (it is not scheduled)

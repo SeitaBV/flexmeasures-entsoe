@@ -3,18 +3,13 @@ from datetime import datetime
 
 import click
 from flask.cli import with_appcontext
-from flask import current_app
 import pandas as pd
 
-import entsoe
-from entsoe import EntsoePandasClient
 from flexmeasures.data.transactional import task_with_status_report
 
 from . import pricing_sensors
 from .. import (
     entsoe_data_bp,
-    DEFAULT_COUNTRY_CODE,
-    DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 from ..utils import (
     create_entsoe_client,
@@ -23,7 +18,6 @@ from ..utils import (
     parse_from_and_to_dates_default_today_and_tomorrow,
     ensure_sensors,
     save_entsoe_series,
-    get_auth_token_from_config_and_set_server_url,
     abort_if_data_empty,
     start_import_log,
 )
@@ -74,7 +68,9 @@ def import_day_ahead_prices(
     when tomorrow's prices are announced.
     """
     # Set up FlexMeasures data structure
-    country_code, country_timezone = ensure_country_code_and_timezone(country_code, country_timezone)
+    country_code, country_timezone = ensure_country_code_and_timezone(
+        country_code, country_timezone
+    )
     sensors = ensure_sensors(pricing_sensors, country_code, country_timezone)
     entsoe_data_source = ensure_data_source()
     # For now, we only have one pricing sensor ...
@@ -88,7 +84,9 @@ def import_day_ahead_prices(
 
     # Start import
     client = create_entsoe_client()
-    log, now = start_import_log("day-ahead price", from_time, until_time, country_code, country_timezone)
+    log, now = start_import_log(
+        "day-ahead price", from_time, until_time, country_code, country_timezone
+    )
 
     log.info("Getting prices ...")
     prices: pd.Series = client.query_day_ahead_prices(
@@ -100,4 +98,6 @@ def import_day_ahead_prices(
     if not dryrun:
         log.info(f"Saving {len(prices)} beliefs for Sensor {pricing_sensor.name} ...")
         prices.name = "event_value"  # required by timely_beliefs, TODO: check if that still is the case, see https://github.com/SeitaBV/timely-beliefs/issues/64
-        save_entsoe_series(prices, pricing_sensor, entsoe_data_source, country_timezone, now)
+        save_entsoe_series(
+            prices, pricing_sensor, entsoe_data_source, country_timezone, now
+        )
