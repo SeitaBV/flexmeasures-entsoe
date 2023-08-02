@@ -151,11 +151,11 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
-def parse_from_and_to_dates_default_tomorrow(
+def parse_from_and_to_dates_default_today_and_tomorrow(
     from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
 ) -> Tuple[datetime, datetime]:
     """
-    Parse CLI options (or set default to tomorrow)
+    Parse CLI options (or set default to today and tomorrow)
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
