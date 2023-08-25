@@ -66,7 +66,7 @@ def ensure_transmission_zone_asset(country_code: str) -> Asset:
 
 
 def ensure_sensors(
-    sensor_specifications: Tuple,
+    sensor_specifications: Tuple[Tuple],
     country_code: str,
     timezone: str,
 ) -> Dict[str, Sensor]:

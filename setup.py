@@ -24,7 +24,7 @@ def load_requirements(use_case):
 
 setup(
     name="flexmeasures-entsoe",
-    description="Integrating FlexMeasures with ENTSOE",
+    description="Integrating FlexMeasures with ENTSO-E",
     author="Seita Energy Flexibility BV",
     author_email="nicolas@seita.nl",
     url="https://github.com/SeitaBV/flexmeasures-entsoe",
