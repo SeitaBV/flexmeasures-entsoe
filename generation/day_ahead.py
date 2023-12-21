@@ -24,7 +24,7 @@ from ..utils import (
     ensure_data_source_for_derived_data,
     get_auth_token_from_config_and_set_server_url,
     abort_if_data_empty,
-    parse_from_and_to_dates_default_tomorrow,
+    parse_from_and_to_dates_default_today_and_tomorrow,
     save_entsoe_series,
     ensure_sensors,
     resample_if_needed,
@@ -59,7 +59,7 @@ kg_CO2_per_MWh = dict(
     "--from-date",
     required=False,
     type=click.DateTime(["%Y-%m-%d"]),
-    help="Query data from this date onwards. If not specified, defaults to --to-date",
+    help="Query data from this date onwards. If not specified, defaults to today",
 )
 @click.option(
     "--to-date",
@@ -94,7 +94,7 @@ def import_day_ahead_generation(
     country_timezone: Optional[str] = None,
 ):
     """
-    Import forecasted generation for any date range, defaulting to tomorrow.
+    Import forecasted generation for any date range, defaulting to today and tomorrow.
     This will save overall generation, solar, offshore and onshore wind, and the estimated CO₂ content per hour.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
@@ -106,7 +106,7 @@ def import_day_ahead_generation(
     sensors = ensure_sensors(generation_sensors, country_code, country_timezone)
 
     # Parse CLI options (or set defaults)
-    from_time, until_time = parse_from_and_to_dates_default_tomorrow(
+    from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
         from_date, to_date, country_timezone
     )
 
