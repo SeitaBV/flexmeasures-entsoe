@@ -5,10 +5,17 @@ import click
 from flask.cli import with_appcontext
 from flask import current_app
 import pandas as pd
+from flexmeasures import Source, Sensor
 
 import entsoe
 from entsoe import EntsoePandasClient
 from flexmeasures.data.transactional import task_with_status_report
+
+from flexmeasures.data.schemas import (
+    SensorIdField
+)
+from flexmeasures.data.schemas.sources import DataSourceIdField
+
 
 from . import pricing_sensors
 from .. import (
@@ -59,6 +66,20 @@ from ..utils import (
     required=False,
     help="Timezone for the country (such as 'Europe/Amsterdam').",
 )
+@click.option(
+    "--sensor",
+    "sensor",
+    type=SensorIdField(),
+    required=False,
+    help="Sensor to store the data into. If not provided, the sensor `Day-ahead prices` is used.",
+)
+@click.option(
+    "--source",
+    "source",
+    type=DataSourceIdField(),
+    required=False,
+    help="Timezone for the country (such as 'Europe/Amsterdam').",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
 def import_day_ahead_prices(
@@ -67,6 +88,8 @@ def import_day_ahead_prices(
     to_date: Optional[datetime] = None,
     country_code: Optional[str] = None,
     country_timezone: Optional[str] = None,
+    sensor : Optional[Sensor] = None,
+    source : Optional[Source] = None
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -75,12 +98,21 @@ def import_day_ahead_prices(
     """
     # Set up FlexMeasures data structure
     country_code, country_timezone = ensure_country_code_and_timezone(country_code, country_timezone)
-    sensors = ensure_sensors(pricing_sensors, country_code, country_timezone)
-    entsoe_data_source = ensure_data_source()
-    # For now, we only have one pricing sensor ...
-    pricing_sensor = sensors["Day-ahead prices"]
-    assert pricing_sensor.name == "Day-ahead prices"
+    
+    if source is None:
+        entsoe_data_source = ensure_data_source()
+    else:
+        entsoe_data_source = source
 
+    if sensor is None:
+        # For now, we only have one pricing sensor ...
+        sensors = ensure_sensors(pricing_sensors, country_code, country_timezone)
+        pricing_sensor = sensors["Day-ahead prices"]
+        assert pricing_sensor.name == "Day-ahead prices"
+    else:
+        pricing_sensor = sensor
+
+    breakpoint()
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
         from_date, to_date, country_timezone
