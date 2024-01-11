@@ -78,7 +78,7 @@ from ..utils import (
     "source",
     type=DataSourceIdField(),
     required=False,
-    help="Timezone for the country (such as 'Europe/Amsterdam').",
+    help="Source of the price data. If not provided, the source `ENTSO-E` is used.",
 )
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
@@ -112,7 +112,6 @@ def import_day_ahead_prices(
     else:
         pricing_sensor = sensor
 
-    breakpoint()
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
         from_date, to_date, country_timezone
