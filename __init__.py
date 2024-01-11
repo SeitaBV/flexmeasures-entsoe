@@ -10,7 +10,7 @@ DEFAULT_COUNTRY_CODE = "NL"
 DEFAULT_COUNTRY_TIMEZONE = "Europe/Amsterdam"  # This is what we receive, even if ENTSO-E documents Europe/Brussels
 DEFAULT_DERIVED_DATA_SOURCE = "FlexMeasures ENTSO-E"
 
-__version__ = "0.7"
+__version__ = "0.8"
 __settings__ = {
     "ENTSOE_AUTH_TOKEN": dict(
         description="You can generate this token after you made an account at ENTSO-E.",
