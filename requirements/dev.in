@@ -1,0 +1,12 @@
+-c app.txt
+-c test.txt
+
+pre-commit
+black
+flake8
+flake8-blind-except
+mypy
+pytest-runner
+types-pytz
+setuptools_scm
+watchdog
