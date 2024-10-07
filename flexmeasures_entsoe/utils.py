@@ -242,7 +242,7 @@ def save_entsoe_series(
     if not now:
         now = server_now().astimezone(pytz.timezone(country_timezone))
     belief_times = (
-        (series.index.floor("D") - pd.Timedelta("6H"))
+        (series.index.floor("D") - pd.Timedelta("6h"))
         .to_frame(name="clipped_belief_times")
         .clip(upper=now)
         .set_index("clipped_belief_times")
