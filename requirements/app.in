@@ -1,2 +1,2 @@
-flexmeasures>=0.9.3
+# only listing extra dependencies that flexmeasures does not have
 entsoe-py

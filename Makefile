@@ -13,6 +13,7 @@ test:
 
 install: install-deps install-flexmeasures-entsoe
 
+# only use this if you do not already have FlexMeasures in your dev environment
 install-for-dev:
 	make freeze-deps
 	pip-sync requirements/app.txt requirements/dev.txt requirements/test.txt
@@ -25,7 +26,7 @@ install-deps:
 	pip-sync requirements/app.txt
 
 install-flexmeasures-entsoe:
-	python setup.py develop
+	pip install -e .
 
 install-pip-tools:
 	pip3 install -q "pip-tools>=6.2"

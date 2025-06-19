@@ -1,6 +1,8 @@
 -c app.txt
 -c test.txt
 
+# include flexmeasures as a dev dependency so a fresh environment has it
+flexmeasures>=0.9.3
 pre-commit
 black
 flake8
