@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 
 def load_requirements(use_case):
@@ -6,8 +6,8 @@ def load_requirements(use_case):
     Loading range requirements.
     Packaging should be used for installing the package into existing stacks.
     We therefore read the .in file for the use case.
-    .txt files include the exact pins, and are useful for deployments with
-    exactly comparable environments.
+    .txt files include the exact pins, and are useful for deployments or dev
+    environments with exactly comparable environments.
     """
     reqs = []
     with open("requirements/%s.in" % use_case, "r") as f:
@@ -22,26 +22,5 @@ def load_requirements(use_case):
     return reqs
 
 
-setup(
-    name="flexmeasures-entsoe",
-    description="Integrating FlexMeasures with ENTSO-E",
-    author="Seita Energy Flexibility BV",
-    author_email="nicolas@seita.nl",
-    url="https://github.com/SeitaBV/flexmeasures-entsoe",
-    keywords=["flexmeasures", "energy flexibility"],
-    install_requires=load_requirements("app"),
-    tests_require=load_requirements("test"),
-    setup_requires=["pytest-runner", "setuptools_scm"],
-    use_scm_version={"local_scheme": "no-local-version"},  # handled by setuptools_scm
-    packages=find_packages(),
-    include_package_data=True,  # setuptools_scm takes care of adding the files in SCM
-    classifiers=[
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3.9",
-        "Development Status :: 3 - Alpha",
-        "License :: OSI Approved :: Apache Software License",
-        "Operating System :: OS Independent",
-    ],
-    long_description="""\
-""",
-)
+setup(install_requires=load_requirements("app"))
+
