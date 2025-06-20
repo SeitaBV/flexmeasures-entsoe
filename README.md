@@ -26,8 +26,7 @@ Use ``--help`` to learn more usage details.
 
 First of all, this is a FlexMeasures plugin. Consult the FlexMeasures documentation for setup.
 
-1. Add the path to this directory to your FlexMeasures (>v0.4.0) config file,
-using the `FLEXMEASURES_PLUGINS` setting.
+1. Add the plugin to [the `FLEXMEASURES_PLUGINS` setting](https://flexmeasures.readthedocs.io/en/latest/configuration.html#plugin-config). Either use `/path/to/flexmeasures-entsoe/flexmeasures_entsoe` or `flexmeasures_entsoe` if you installed this as a package locally (see below).
 
 2. Add `ENTSOE_AUTH_TOKEN` to your FlexMeasures config (e.g. ~/.flexmeasures.cfg).
 You can generate this token after you made an account at ENTSO-E, read more [here](https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html#_authentication_and_authorisation). 
@@ -41,7 +40,7 @@ You can generate this token after you made an account at ENTSO-E, read more [her
    The `ENTSOE_DERIVED_DATA_SOURCE` option is used to name the source of data that this plugin derives from ENTSO-E data, like a CO₂ signal.
    Original ENTSO-E data is reported as being sourced by `"ENTSO-E"`.
 
-3. `pip install entsoe-py`
+3. To install this plugin locally as a package, try `pip install .`.
 
 
 ## Testing
@@ -61,4 +60,11 @@ To keep our code quality high, we use pre-commit:
 
     pip install pre-commit black flake8 mypy
     pre-commit install
+
+or:
+    
+    make install-for-dev
+
+Try it:
+
     pre-commit run --all-files --show-diff-on-failure
