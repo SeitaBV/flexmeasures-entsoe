@@ -219,7 +219,7 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
             s.index[0],
             s.index[-1] + inferred_resolution,
             freq=target_resolution,
-            closed="left",
+            inclusive="left",
         )
         s = s.reindex(index).pad()
     elif inferred_resolution < target_resolution:
