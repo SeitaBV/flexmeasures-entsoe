@@ -124,6 +124,10 @@ def import_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
     abort_if_data_empty(prices)
+
+    if pricing_sensor.event_resolution != pd.Timedelta(hours=1):
+        prices = prices.reindex(prices.index.append(pd.DatetimeIndex([prices.index[-1] + prices.index.freq]))).resample("15min").ffill().head(-1)
+
     log.debug("Prices: \n%s" % prices)
 
     if not dryrun:
