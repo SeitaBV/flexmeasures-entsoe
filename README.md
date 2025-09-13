@@ -22,6 +22,47 @@ Importing tomorrow's generation (incl. CO2 estimated content):
 Use ``--help`` to learn more usage details.
 
 
+### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
+
+You have two choices:
+
+1. resample your existing price sensor in FlexMeasures from 1 hour to 15 minutes, or
+2. create a new price sensor in FlexMeasures with a 15-min resolution.
+
+#### 1. Resampling
+
+**The upside** of resampling your existing price data is that the sensor ID of your price sensor in FlexMeasures will remain the same. Depending on your system setup, Forecaster/Reporter/Scheduler configurations (such as an asset's `flex-context`) may depend on it, and your users may expect the 15-minute data to live under the same sensor.
+
+**The downside** is that it quadruples your data for that sensor, due to the fact that FlexMeasures only supports a fixed resolution for any given sensor. Although there should be no noticeable hit in performance, it obviously leads to redundant data in the price history before October 1st 2025.  
+
+**To resample** your historical data, use:
+
+```bash
+flexmeasures edit resample-data --sensor <ID of your day-ahead price sensor> --event-resolution 15
+```
+
+The `flexmeasures-entsoe` package already automatically resamples the ENTSO-E data to the resolution of your sensor.
+
+#### 2. Creating a new sensor
+
+**The upside** is that this doesn't quadruple your historic data (see *the downside* of resampling, above).
+
+**The downside** is that you may need to revise Forecaster/Reporter/Scheduler configurations (such as an asset's `flex-context`) and notify users (see *the upside* of resampling, above).
+
+**To create a new sensor**, in this example for the NL bidding zone, use:
+
+```bash
+flexmeasures add sensor --name '15-min day-ahead prices' --unit EUR/MWh --event-resolution PT15M --timezone Europe/Amsterdam --asset <ID of your 'NL transmission zone' asset>
+```
+
+and pass your new sensor ID when calling the price import command:
+
+```bash
+flexmeasures entsoe import-day-ahead-prices --sensor <new sensor ID> --country NL
+```
+
+The `flexmeasures-entsoe` package already automatically resamples the ENTSO-E data to the resolution of your sensor.
+
 ## Installation
 
 First of all, this is a FlexMeasures plugin. Consult the FlexMeasures documentation for setup.
