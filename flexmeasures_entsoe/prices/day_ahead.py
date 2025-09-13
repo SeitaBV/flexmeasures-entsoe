@@ -26,6 +26,7 @@ from ..utils import (
     ensure_sensors,
     save_entsoe_series,
     abort_if_data_empty,
+    resample_if_needed,
     start_import_log,
 )
 
@@ -124,10 +125,7 @@ def import_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
     abort_if_data_empty(prices)
-
-    if pricing_sensor.event_resolution != pd.Timedelta(hours=1):
-        prices = prices.reindex(prices.index.append(pd.DatetimeIndex([prices.index[-1] + prices.index.freq]))).resample("15min").ffill().head(-1)
-
+    prices = resample_if_needed(prices, pricing_sensor)
     log.debug("Prices: \n%s" % prices)
 
     if not dryrun:
