@@ -34,7 +34,8 @@ If you do this *after* the go-live moment, the `flexmeasures-entsoe` package jus
 
 #### 1. Resampling
 
-**The upside** of resampling your existing price data is that the sensor ID of your price sensor in FlexMeasures will remain the same. Depending on your system setup, Forecaster/Reporter/Scheduler configurations (such as an asset's `flex-context`) may depend on it, and your users may expect the 15-minute data to live under the same sensor.
+**The upside** of resampling your existing price data is that the sensor ID of your price sensor in FlexMeasures will remain the same.
+Depending on your system setup, `Forecaster`/`Reporter`/`Scheduler` configurations (such as an asset's `flex-context`) may depend on it, and your users may expect the 15-minute data to live under the same sensor.
 
 **The downside** is that it quadruples your data for that sensor, due to the fact that FlexMeasures only supports a fixed resolution for any given sensor. Although there should be no noticeable hit in performance, it obviously leads to redundant data in the price history before October 1st 2025.  
 
@@ -52,13 +53,13 @@ If you have any price sensors using a Reporter to derive values from the day-ahe
 
 **The upside** is that this doesn't quadruple your historic data (see *the downside* of resampling, above).
 
-**The downside** is that you may need to revise Forecaster/Reporter/Scheduler configurations (such as an asset's `flex-context`) and notify users (see *the upside* of resampling, above).
+**The downside** is that you may need to revise `Forecaster`/`Reporter`/`Scheduler` configurations (such as an asset's `flex-context`) and notify users (see *the upside* of resampling, above).
 
 **To get a new sensor**, rename your existing *Day-ahead prices* sensor in the FlexMeasures UI.
 
 The `flexmeasures-entsoe` package will then automatically create a new 15-minute price sensor the next time `flexmeasures entsoe import-day-ahead-prices` is run, assigning it a new sensor ID.
 
-If you have any price sensors using a Reporter to derive values from the day-ahead wholesale prices, update the sensor ID in the configuration of each Reporter.
+If you have any price sensors using a `Reporter` to derive values from the day-ahead wholesale prices, update the sensor ID in the configuration of each `Reporter`.
 Finally, resample each derived price sensor using:
 
 ```bash
