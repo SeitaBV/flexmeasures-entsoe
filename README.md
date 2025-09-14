@@ -46,15 +46,24 @@ flexmeasures edit resample-data --sensor <ID of your day-ahead price sensor> --e
 
 The `flexmeasures-entsoe` package already automatically resamples the ENTSO-E data to the resolution of your sensor.
 
+If you have any price sensors using a Reporter to derive values from the day-ahead wholesale prices, there is no need to update the configuration of each Reporters; just resample the derived price sensors using the previous command (replacing the sensor ID as needed).
+
 #### 2. Getting a new sensor
 
 **The upside** is that this doesn't quadruple your historic data (see *the downside* of resampling, above).
 
 **The downside** is that you may need to revise Forecaster/Reporter/Scheduler configurations (such as an asset's `flex-context`) and notify users (see *the upside* of resampling, above).
 
-**To get a new sensor**, rename your existing *Day-ahead prices* sensor in the FlexMeasures UI. 
+**To get a new sensor**, rename your existing *Day-ahead prices* sensor in the FlexMeasures UI.
 
-The `flexmeasures-entsoe` package will then automatically create a new 15-minute price sensor the next time `flexmeasures entsoe import-day-ahead-prices` is run.
+The `flexmeasures-entsoe` package will then automatically create a new 15-minute price sensor the next time `flexmeasures entsoe import-day-ahead-prices` is run, assigning it a new sensor ID.
+
+If you have any price sensors using a Reporter to derive values from the day-ahead wholesale prices, update the sensor ID in the configuration of each Reporter.
+Finally, resample each derived price sensor using:
+
+```bash
+flexmeasures edit resample-data --sensor <ID of your derivative price sensor> --event-resolution 15
+```
 
 ## Installation
 
