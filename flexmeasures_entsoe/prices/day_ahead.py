@@ -8,9 +8,7 @@ from flexmeasures import Source, Sensor
 
 from flexmeasures.data.transactional import task_with_status_report
 
-from flexmeasures.data.schemas import (
-    SensorIdField
-)
+from flexmeasures.data.schemas import SensorIdField
 from flexmeasures.data.schemas.sources import DataSourceIdField
 
 
@@ -83,8 +81,8 @@ def import_day_ahead_prices(
     to_date: Optional[datetime] = None,
     country_code: Optional[str] = None,
     country_timezone: Optional[str] = None,
-    sensor : Optional[Sensor] = None,
-    source : Optional[Source] = None
+    sensor: Optional[Sensor] = None,
+    source: Optional[Source] = None,
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -95,7 +93,7 @@ def import_day_ahead_prices(
     country_code, country_timezone = ensure_country_code_and_timezone(
         country_code, country_timezone
     )
-    
+
     if source is None:
         entsoe_data_source = ensure_data_source()
     else:
