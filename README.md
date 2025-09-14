@@ -24,7 +24,8 @@ Use ``--help`` to learn more usage details.
 
 ### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
 
-You have two choices:
+ENTSO-E is moving from 1-hour day-ahead prices 15-minute day-ahead prices on October 1st 2025.
+To prepare for this transition, you have two choices:
 
 1. resample your existing price sensor in FlexMeasures from 1 hour to 15 minutes, or
 2. create a new price sensor in FlexMeasures with a 15-min resolution.
