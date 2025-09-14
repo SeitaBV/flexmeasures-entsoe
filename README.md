@@ -47,7 +47,8 @@ flexmeasures edit resample-data --sensor <ID of your day-ahead price sensor> --e
 
 The `flexmeasures-entsoe` package already automatically resamples the ENTSO-E data to the resolution of your sensor.
 
-If you have any price sensors using a Reporter to derive values from the day-ahead wholesale prices, there is no need to update the configuration of each Reporters; just resample the derived price sensors using the previous command (replacing the sensor ID as needed).
+If you use a `Reporter` to derive retail prices or to compute energy costs, there is no need to update its configuration; just resample these sensors too, using the previous command (replacing the sensor ID as needed).
+Alternatively, if you want to keep these sensors in their original resolution, and find that your reporters fail with an `AssertionError` about mismatched resolutions, you may need to add the `--resolution PT1H` option when using the `flexmeasures add report` command.
 
 #### 2. Getting a new sensor
 
@@ -59,12 +60,14 @@ If you have any price sensors using a Reporter to derive values from the day-ahe
 
 The `flexmeasures-entsoe` package will then automatically create a new 15-minute price sensor the next time `flexmeasures entsoe import-day-ahead-prices` is run, assigning it a new sensor ID.
 
-If you have any price sensors using a `Reporter` to derive values from the day-ahead wholesale prices, update the sensor ID in the configuration of each `Reporter`.
-Finally, resample each derived price sensor using:
+If you have any price or costs sensors using a `Reporter` to derive values from the day-ahead wholesale prices, update the sensor ID in the configuration of each `Reporter`.
+Finally, either resample each derived sensor using:
 
 ```bash
-flexmeasures edit resample-data --sensor <ID of your derivative price sensor> --event-resolution 15
+flexmeasures edit resample-data --sensor <ID of your derivative sensor> --event-resolution 15
 ```
+
+or, if you want to keep these sensors in their original resolution, and find that your reporters fail with an `AssertionError` about mismatched resolutions, you may need to add the `--resolution PT1H` option when using the `flexmeasures add report` command.
 
 ## Installation
 
