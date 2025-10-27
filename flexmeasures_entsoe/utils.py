@@ -209,6 +209,7 @@ def parse_from_and_to_dates_default_yesterday(
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
     inferred_frequency = pd.infer_freq(s.index)
+    breakpoint()
     if inferred_frequency is None:
         raise ValueError(
             "Data has no discernible frequency from which to derive an event resolution."
