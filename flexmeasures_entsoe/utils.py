@@ -171,7 +171,7 @@ def abort_if_data_incomplete(
         raise click.Abort
 
 
-def parse_from_and_to_dates_default_today_and_tomorrow(
+def parse_from_and_to_dates(
     from_time: Optional[datetime],
     until_time: Optional[datetime],
     country_timezone: str,

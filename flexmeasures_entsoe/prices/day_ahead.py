@@ -20,7 +20,7 @@ from ..utils import (
     create_entsoe_client,
     ensure_country_code_and_timezone,
     ensure_data_source,
-    parse_from_and_to_dates_default_today_and_tomorrow,
+    parse_from_and_to_dates,
     ensure_sensors,
     save_entsoe_series,
     abort_if_data_empty,
@@ -118,7 +118,7 @@ def import_day_ahead_prices(
         pricing_sensor = sensor
 
     # Parse CLI options (or set defaults)
-    from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
+    from_time, until_time = parse_from_and_to_dates(
         from_date, to_date, country_timezone, scheduled_for
     )
 

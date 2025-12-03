@@ -19,7 +19,7 @@ from ..utils import (
     ensure_data_source,
     ensure_data_source_for_derived_data,
     abort_if_data_empty,
-    parse_from_and_to_dates_default_today_and_tomorrow,
+    parse_from_and_to_dates,
     save_entsoe_series,
     ensure_sensors,
     resample_if_needed,
@@ -104,7 +104,7 @@ def import_day_ahead_generation(
         cast(Tuple[Tuple[Any, ...]], generation_sensors), country_code, country_timezone
     )
     # Parse CLI options (or set defaults)
-    from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
+    from_time, until_time = parse_from_and_to_dates(
         from_date, to_date, country_timezone
     )
 
