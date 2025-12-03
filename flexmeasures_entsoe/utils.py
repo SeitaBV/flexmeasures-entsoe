@@ -157,27 +157,49 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
+def abort_if_data_incomplete(
+    data: Union[pd.DataFrame, pd.Series],
+    from_time: pd.Timestamp,
+    until_time: pd.Timestamp,
+    resolution: pd.Timedelta,
+):
+    expected_periods = int((until_time - from_time) / resolution)
+    if len(data) < expected_periods:
+        click.echo(
+            f"Result is incomplete. Expected {expected_periods} periods but got {len(data)}. Probably ENTSO-E does not provide these forecasts yet ..."
+        )
+        raise click.Abort
+
+
 def parse_from_and_to_dates_default_today_and_tomorrow(
-    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
+    from_time: Optional[datetime],
+    until_time: Optional[datetime],
+    country_timezone: str,
+    default_to="tomorrow",  # Can be "tomorrow" or "today"
 ) -> Tuple[datetime, datetime]:
     """
     Parse CLI options (or set default to today and tomorrow)
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    if to_date is None:
-        to_date = pd.Timestamp(
+    if default_to == "tomorrow":
+        today_start += pd.offsets.DateOffset(
+            days=1
+        )  # Move to tomorrow start instead of just 24 hours
+
+    if until_time is None:
+        until_time = pd.Timestamp(
             today_start, tzinfo=pytz.timezone(country_timezone)
         ) + pd.offsets.DateOffset(
             days=1
         )  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
     else:
-        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
-    if from_date is None:
-        from_date = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone))
+        until_time = pd.Timestamp(until_time, tzinfo=pytz.timezone(country_timezone))
+    if from_time is None:
+        from_time = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone))
     else:
-        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
-    from_time, until_time = date_range_to_time_range(from_date, to_date)
+        from_time = pd.Timestamp(from_time, tzinfo=pytz.timezone(country_timezone))
+    from_time, until_time = date_range_to_time_range(from_time, until_time)
     return from_time, until_time
 
 

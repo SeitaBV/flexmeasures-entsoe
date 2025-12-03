@@ -24,6 +24,7 @@ from ..utils import (
     ensure_sensors,
     save_entsoe_series,
     abort_if_data_empty,
+    abort_if_data_incomplete,
     resample_if_needed,
     start_import_log,
 )
@@ -73,6 +74,14 @@ from ..utils import (
     required=False,
     help="Source of the price data. If not provided, the source `ENTSO-E` is used.",
 )
+@click.option(
+    "--for",
+    "scheduled_for",
+    required=False,
+    default_to="tomorrow",
+    type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
+    help="If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for that day.",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
 def import_day_ahead_prices(
@@ -83,6 +92,7 @@ def import_day_ahead_prices(
     country_timezone: Optional[str] = None,
     sensor: Optional[Sensor] = None,
     source: Optional[Source] = None,
+    scheduled_for: str = "tomorrow",
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -109,7 +119,7 @@ def import_day_ahead_prices(
 
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
-        from_date, to_date, country_timezone
+        from_date, to_date, country_timezone, scheduled_for
     )
 
     # Start import
@@ -123,6 +133,9 @@ def import_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
     abort_if_data_empty(prices)
+    abort_if_data_incomplete(
+        prices, from_time, until_time, pricing_sensor.event_resolution
+    )
     prices = resample_if_needed(prices, pricing_sensor)
     log.debug("Prices: \n%s" % prices)
 
