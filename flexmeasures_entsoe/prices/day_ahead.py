@@ -80,7 +80,7 @@ from ..utils import (
     required=False,
     default_to="tomorrow",
     type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
-    help="If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for that day.",
+    help="Easy-to-use time range setting, only used if --from-date and --to-date are not used. If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for thes days.",
 )
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
