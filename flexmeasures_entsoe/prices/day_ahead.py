@@ -76,7 +76,7 @@ from ..utils import (
 )
 @click.option(
     "--for",
-    "scheduled_for",
+    "default_import_timerange",
     required=False,
     default_to="tomorrow",
     type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
@@ -92,7 +92,7 @@ def import_day_ahead_prices(
     country_timezone: Optional[str] = None,
     sensor: Optional[Sensor] = None,
     source: Optional[Source] = None,
-    scheduled_for: str = "tomorrow",
+    default_import_timerange: str = "tomorrow",
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
