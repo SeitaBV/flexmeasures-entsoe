@@ -78,7 +78,7 @@ from ..utils import (
     "--for",
     "default_import_timerange",
     required=False,
-    default_to="tomorrow",
+    default="tomorrow",
     type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
     help="Easy-to-use time range setting, only used if --from-date and --to-date are not used. If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for thes days.",
 )
