@@ -119,7 +119,7 @@ def import_day_ahead_prices(
 
     # Parse CLI options (or set defaults)
     from_time, until_time = parse_from_and_to_dates(
-        from_date, to_date, country_timezone, scheduled_for
+        from_date, to_date, country_timezone, default_to=default_import_timerange
     )
 
     # Start import
