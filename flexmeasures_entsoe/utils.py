@@ -15,7 +15,7 @@ from flexmeasures import Asset, AssetType, Sensor, Source
 from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
-
+from flexmeasures.cli.utils import MsgStyle
 from . import (
     DEFAULT_DERIVED_DATA_SOURCE,
     DEFAULT_COUNTRY_CODE,
@@ -165,8 +165,9 @@ def abort_if_data_incomplete(
 ):
     expected_periods = int((until_time - from_time) / resolution)
     if len(data) < expected_periods:
-        click.echo(
-            f"Result is incomplete. Expected {expected_periods} periods but got {len(data)}. Probably ENTSO-E does not provide these forecasts yet ..."
+        click.secho(
+            f"Result is incomplete. Expected {expected_periods} periods but got {len(data)}. Probably ENTSO-E does not provide these forecasts yet ...",
+            **MsgStyle.ERROR,
         )
         raise click.Abort
 
@@ -175,7 +176,7 @@ def parse_from_and_to_dates(
     from_time: Optional[datetime],
     until_time: Optional[datetime],
     country_timezone: str,
-    default_to="tomorrow",  # Can be "tomorrow" or "today"
+    default_to="today-and-tomorrow",  # Can be "tomorrow" or "today"
 ) -> Tuple[datetime, datetime]:
     """
     Parse CLI options (or set default to today and tomorrow)
