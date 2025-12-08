@@ -78,9 +78,16 @@ from ..utils import (
     "--for",
     "default_import_timerange",
     required=False,
-    default="tomorrow",
+    default="today-and-tomorrow",
     type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
     help="Easy-to-use time range setting, only used if --from-date and --to-date are not used. If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for thes days. The default is today-and-tomorrow.",
+)
+@click.option(
+    "--fail-on-incomplete-data",
+    "fail_on_incomplete_data",
+    is_flag=True,
+    default=False,
+    help="If set, the import will abort if the data received is incomplete.",
 )
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
@@ -92,7 +99,8 @@ def import_day_ahead_prices(
     country_timezone: Optional[str] = None,
     sensor: Optional[Sensor] = None,
     source: Optional[Source] = None,
-    default_import_timerange: str = "tomorrow",
+    default_import_timerange: str = "today-and-tomorrow",
+    fail_on_incomplete_data: bool = False,
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -133,9 +141,10 @@ def import_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
     abort_if_data_empty(prices)
-    abort_if_data_incomplete(
-        prices, from_time, until_time, pricing_sensor.event_resolution
-    )
+    if fail_on_incomplete_data:
+        abort_if_data_incomplete(
+            prices, from_time, until_time, pricing_sensor.event_resolution
+        )
     prices = resample_if_needed(prices, pricing_sensor)
     log.debug("Prices: \n%s" % prices)
 
