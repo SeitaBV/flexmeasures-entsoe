@@ -48,7 +48,7 @@ def test_parse_from_and_to_dates():
     assert str(s.tz) == tz_str
     assert s.hour == 10
 
-    # Case 2: Defaults (None passed) -> Should default to Tomorrow
+    # Case 2: Tomorrow is parsed correctly
     s_def, e_def = parse_from_and_to_dates(
         from_time=None, until_time=None, country_timezone="UTC", default_to="tomorrow"
     )
@@ -56,3 +56,10 @@ def test_parse_from_and_to_dates():
 
     assert s_def >= now + pd.Timedelta(days=1)
     assert e_def > s_def
+
+    # Case 3: Defaults (None passed) -> Should default to Today and Tomorrow
+    s_def2, e_def2 = parse_from_and_to_dates(
+        from_time=None, until_time=None, country_timezone="UTC"
+    )
+    assert s_def2 >= now
+    assert e_def2 > s_def2
