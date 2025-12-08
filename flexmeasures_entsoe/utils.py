@@ -182,24 +182,32 @@ def parse_from_and_to_dates(
     Parse CLI options (or set default to today and tomorrow)
     Note:  entsoe-py expects time params as pd.Timestamp
     """
-    default_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    tz = pytz.timezone(country_timezone)
+    now = datetime.now(tz)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
     if default_to == "tomorrow":
-        default_start += pd.offsets.DateOffset(
-            days=1
-        )  # Move to tomorrow start instead of just 24 hours
-    default_end = default_start + pd.offsets.DateOffset(days=1)
+        default_start = today_start + pd.DateOffset(days=1)
+        default_end = default_start + pd.DateOffset(days=1)
+    elif default_to == "today":
+        default_start = today_start
+        default_end = today_start + pd.DateOffset(days=1)
+    else:
+        default_start = today_start
+        default_end = today_start + pd.DateOffset(days=1)
 
     if from_time is None:
-        from_time = pd.Timestamp(default_start, tzinfo=pytz.timezone(country_timezone))
+        from_time = pd.Timestamp(default_start)
     else:
         from_time = pd.Timestamp(from_time, tzinfo=pytz.timezone(country_timezone))
 
     if until_time is None:
-        until_time = pd.Timestamp(default_end, tzinfo=pytz.timezone(country_timezone))
+        until_time = pd.Timestamp(default_end)
     else:
         until_time = pd.Timestamp(until_time, tzinfo=pytz.timezone(country_timezone))
 
     from_time, until_time = date_range_to_time_range(from_time, until_time)
+
     return from_time, until_time
 
 
