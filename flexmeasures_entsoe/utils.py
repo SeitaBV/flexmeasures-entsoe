@@ -180,7 +180,7 @@ def parse_from_and_to_dates(
 ) -> Tuple[datetime, datetime]:
     """
     Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
-    Note: we expect only dates as input here, and until_date is inclusice, so we extend it with 24h - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
+    Note: we expect only dates as input here, and until_date is inclusive, so we extend it with 24h - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     tz = pytz.timezone(country_timezone)
