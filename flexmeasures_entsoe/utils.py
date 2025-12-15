@@ -188,7 +188,7 @@ def parse_from_and_to_dates(
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     if default_to == "tomorrow":
-        default_start = today_start + pd.DateOffset(days=1)
+        default_start = today_start + timedelta(days=1)
         default_end = default_start + pd.DateOffset(days=1)
     elif default_to == "today":
         default_start = today_start
