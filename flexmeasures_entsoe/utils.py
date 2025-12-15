@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import Logger
 
 from entsoe import EntsoePandasClient
@@ -176,7 +176,7 @@ def parse_from_and_to_dates(
     from_date: Optional[datetime],
     until_date: Optional[datetime],
     country_timezone: str,
-    default_to:str="today-and-tomorrow",  # Can be "tomorrow" or "today"
+    default_to: str = "today-and-tomorrow",  # Can be "tomorrow" or "today"
 ) -> Tuple[datetime, datetime]:
     """
     Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
@@ -189,27 +189,25 @@ def parse_from_and_to_dates(
 
     if default_to == "tomorrow":
         default_start = today_start + timedelta(days=1)
-        default_end = default_start + pd.DateOffset(days=1)
+        default_end = default_start + timedelta(days=1)
     elif default_to == "today":
         default_start = today_start
-        default_end = today_start + pd.DateOffset(days=1)
+        default_end = today_start + timedelta(days=1)
     else:
         default_start = today_start
-        default_end = today_start + pd.DateOffset(days=1)
+        default_end = today_start + timedelta(days=1)
 
     if from_date is None:
-        from_date = pd.Timestamp(default_start)
+        start_date = pd.Timestamp(default_start)
     else:
-        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
+        start_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
 
     if until_date is None:
-        until_date = pd.Timestamp(default_end)
+        end_date = pd.Timestamp(default_end)
     else:
-        until_date = pd.Timestamp(until_date, tzinfo=pytz.timezone(country_timezone))
+        end_date = pd.Timestamp(until_date, tzinfo=pytz.timezone(country_timezone))
 
-    from_time, until_time = date_range_to_time_range(from_date, until_date)
-
-    return from_time, until_time
+    return start_date, end_date
 
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:

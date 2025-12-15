@@ -52,28 +52,33 @@ def test_parse_from_and_to_dates():
         from_date=input_start, until_date=input_end, country_timezone=tz_str
     )
 
-    # I am deducting one day in all the below asserts, because of the end_date being exclusive
     assert s.tzinfo.zone == tz.zone
-    assert ((e - one_day) - s) == one_day
+    assert (e - s) == timedelta(days=1)
+    assert e == datetime(2025, 5, 2, tzinfo=tz)
 
     # Case 2: default_to="tomorrow"
-    s_def, e_def = parse_from_and_to_dates(
+    s_tom, e_tom = parse_from_and_to_dates(
         from_date=None, until_date=None, country_timezone=tz_str, default_to="tomorrow"
     )
 
-    assert (e_def - one_day) - s_def == one_day
+    assert e_tom - s_tom == timedelta(days=1)
+    assert s_tom == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
 
     # Case 3: default_to="today-and-tomorrow"
-    s_def2, e_def2 = parse_from_and_to_dates(
+    s_tod, e_tod = parse_from_and_to_dates(
         from_date=None, until_date=None, country_timezone=tz_str
     )
 
-    assert (e_def2 - one_day) - s_def2 == one_day
+    assert e_tod - s_tod == timedelta(days=1)
+    assert s_tod == datetime(now.year, now.month, now.day, tzinfo=tz)
+    assert e_tod == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
 
     # Case 4: only providing until_date
     today_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
-    s_def3, e_def3 = parse_from_and_to_dates(
+    s_none, e_none = parse_from_and_to_dates(
         from_date=None, until_date=today_midnight, country_timezone=tz_str
     )
 
-    assert (e_def3 - one_day) - s_def3 == one_day
+    assert e_none - s_none == timedelta(days=1)
+    assert s_none == datetime(now.year, now.month, now.day, tzinfo=tz)
+    assert e_none == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
