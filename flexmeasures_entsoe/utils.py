@@ -176,7 +176,7 @@ def parse_from_and_to_dates(
     from_date: Optional[datetime],
     until_date: Optional[datetime],
     country_timezone: str,
-    default_to="today-and-tomorrow",  # Can be "tomorrow" or "today"
+    default_to:str="today-and-tomorrow",  # Can be "tomorrow" or "today"
 ) -> Tuple[datetime, datetime]:
     """
     Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
