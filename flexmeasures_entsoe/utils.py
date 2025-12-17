@@ -177,7 +177,7 @@ def parse_from_and_to_dates(
     until_date: Optional[datetime],
     country_timezone: str,
     default_to: str = "today-and-tomorrow",  # Can be "tomorrow" or "today"
-) -> Tuple[datetime, datetime]:
+) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
     Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
     Note: we expect only dates as input here, and until_date is inclusive, so we extend it with 24h - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
@@ -187,15 +187,19 @@ def parse_from_and_to_dates(
     now = datetime.now(tz)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    if default_to == "tomorrow":
+    if default_to == "today":
+        default_start = today_start
+        default_end = today_start + timedelta(days=1)
+    elif default_to == "tomorrow":
         default_start = today_start + timedelta(days=1)
         default_end = default_start + timedelta(days=1)
-    elif default_to == "today":
+    elif default_to == "today-and-tomorrow":
         default_start = today_start
-        default_end = today_start + timedelta(days=1)
+        default_end = default_start + timedelta(days=2)
     else:
-        default_start = today_start
-        default_end = today_start + timedelta(days=1)
+        raise ValueError(
+            f"Invalid default_to value: {default_to}. Expected 'today', 'tomorrow' or 'today-and-tomorrow'."
+        )
 
     if from_date is None:
         start_date = pd.Timestamp(default_start)
@@ -268,13 +272,6 @@ def save_entsoe_series(
         current_app.logger.info("Done. These beliefs had already been saved before.")
     elif status == "success_with_unchanged_beliefs_skipped":
         current_app.logger.info("Done. Some beliefs had already been saved before.")
-
-
-def date_range_to_time_range(
-    from_date: pd.Timestamp, to_date: pd.Timestamp
-) -> Tuple[pd.Timestamp, pd.Timestamp]:
-    """Because to_date is inclusive, we add one calendar day."""
-    return from_date, to_date + pd.offsets.DateOffset(days=1)
 
 
 def start_import_log(
