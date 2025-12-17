@@ -43,6 +43,7 @@ def test_parse_from_and_to_dates():
     tz = pytz.timezone(tz_str)
     one_day = timedelta(days=1)
     now = datetime.now(tz)
+    today = datetime(now.year, now.month, now.day, tzinfo=tz)
 
     # Case 1: Explicit inputs
     input_start = datetime(2025, 5, 1)
@@ -62,16 +63,16 @@ def test_parse_from_and_to_dates():
     )
 
     assert e_tom - s_tom == timedelta(days=1)
-    assert s_tom == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
+    assert s_tom == today + one_day
 
     # Case 3: default_to="today-and-tomorrow"
     s_tod, e_tod = parse_from_and_to_dates(
         from_date=None, until_date=None, country_timezone=tz_str
     )
 
-    assert e_tod - s_tod == timedelta(days=1)
-    assert s_tod == datetime(now.year, now.month, now.day, tzinfo=tz)
-    assert e_tod == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
+    assert e_tod - s_tod == timedelta(days=2)
+    assert s_tod == today
+    assert e_tod == today + timedelta(days=2)
 
     # Case 4: only providing until_date
     today_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
@@ -80,5 +81,5 @@ def test_parse_from_and_to_dates():
     )
 
     assert e_none - s_none == timedelta(days=1)
-    assert s_none == datetime(now.year, now.month, now.day, tzinfo=tz)
-    assert e_none == datetime(now.year, now.month, now.day, tzinfo=tz) + one_day
+    assert s_none == today
+    assert e_none == today + one_day
