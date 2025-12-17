@@ -64,6 +64,7 @@ def test_parse_from_and_to_dates():
 
     assert e_tom - s_tom == timedelta(days=1)
     assert s_tom == today + one_day
+    assert e_tom == today + timedelta(days=2)
 
     # Case 3: default_to="today-and-tomorrow"
     s_tod, e_tod = parse_from_and_to_dates(
