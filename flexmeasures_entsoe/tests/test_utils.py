@@ -61,18 +61,18 @@ def test_parse_from_and_to_dates():
         from_date=None, until_date=None, country_timezone=tz_str, default_to="tomorrow"
     )
 
-    assert e_tom - s_tom == timedelta(days=2)
+    assert e_tom - s_tom == timedelta(days=1)
     assert s_tom == today + timedelta(days=1)
-    assert e_tom == today + timedelta(days=3)
+    assert e_tom == today + timedelta(days=2)
 
     # Case 3: default_to="today-and-tomorrow"
     s_tod, e_tod = parse_from_and_to_dates(
         from_date=None, until_date=None, country_timezone=tz_str
     )
 
-    assert e_tod - s_tod == timedelta(days=3)
+    assert e_tod - s_tod == timedelta(days=2)
     assert s_tod == today
-    assert e_tod == today + timedelta(days=3)
+    assert e_tod == today + timedelta(days=2)
 
     # Case 4: only providing until_date
     today_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)

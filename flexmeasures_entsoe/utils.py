@@ -210,9 +210,8 @@ def parse_from_and_to_dates(
         end_date = pd.Timestamp(default_end)
     else:
         end_date = pd.Timestamp(until_date, tzinfo=pytz.timezone(country_timezone))
-
-    # The until_date provided is considered inclusive, so we add 24 hours to include the entire day
-    end_date += pd.Timedelta(hours=24)
+        # The until_date provided is considered inclusive, so we add 24 hours to include the entire day
+        end_date += pd.Timedelta(hours=24)
 
     return start_date, end_date
 
