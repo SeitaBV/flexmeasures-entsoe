@@ -74,7 +74,7 @@ def test_parse_from_and_to_dates():
     assert s_tod == today
     assert e_tod == today + timedelta(days=2)
 
-    # Case 4: only providing until_date
+    # Case 4: only providing until_date (today midnight == start of tomorrow), while start comes from "today-and-tomorrow"
     today_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
     s_none, e_none = parse_from_and_to_dates(
         from_date=None, until_date=today_midnight, country_timezone=tz_str
