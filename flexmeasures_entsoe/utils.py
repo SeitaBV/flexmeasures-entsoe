@@ -1,3 +1,4 @@
+import inspect
 from typing import Dict, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from logging import Logger
@@ -10,33 +11,66 @@ import click
 import pytz
 import entsoe
 
-from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures import Asset, AssetType, Sensor, Source
+from flexmeasures.data.utils import save_to_db
+from flexmeasures import Account, Asset, AssetType, Sensor, Source
 from flexmeasures.data import db
+from flexmeasures.data.services.data_sources import get_or_create_source
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
 from flexmeasures.cli.utils import MsgStyle
 from . import (
+    DEFAULT_DATA_SOURCE_NAME,
     DEFAULT_DERIVED_DATA_SOURCE,
     DEFAULT_COUNTRY_CODE,
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 
+SUPPORTS_SOURCE_ACCOUNT = (
+    "account" in inspect.signature(get_or_create_source).parameters
+)
+
+
+def get_or_create_entsoe_account() -> Account:
+    """Make sure we have an account for the ENTSO-E provider service."""
+    account_name = current_app.config.get(
+        "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
+    )
+    entsoe_account = Account.query.filter(
+        Account.name == account_name,
+    ).one_or_none()
+    if entsoe_account is None:
+        entsoe_account = Account(name=account_name)
+        db.session.add(entsoe_account)
+        db.session.flush()
+    return entsoe_account
+
 
 def ensure_data_source() -> Source:
-    return get_data_source(
-        data_source_name="ENTSO-E",
-        data_source_type="forecasting script",
+    """Make sure we have a raw ENTSO-E data source of type "market"."""
+    source_kwargs = dict(
+        source=current_app.config.get(
+            "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
+        ),
+        source_type="market",
+        flush=False,
     )
+    if SUPPORTS_SOURCE_ACCOUNT:
+        source_kwargs["account"] = get_or_create_entsoe_account()
+    return get_or_create_source(**source_kwargs)
 
 
 def ensure_data_source_for_derived_data() -> Source:
-    return get_data_source(
-        data_source_name=current_app.config.get(
+    """Make sure we have a data source for data derived from ENTSO-E data."""
+    source_kwargs = dict(
+        source=current_app.config.get(
             "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
         ),
-        data_source_type="forecasting script",
+        source_type="forecasting script",
+        flush=False,
     )
+    if SUPPORTS_SOURCE_ACCOUNT:
+        source_kwargs["account"] = get_or_create_entsoe_account()
+    return get_or_create_source(**source_kwargs)
 
 
 def ensure_transmission_zone_asset(country_code: str) -> Asset:

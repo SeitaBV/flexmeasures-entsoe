@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 DEFAULT_COUNTRY_CODE = "NL"
 DEFAULT_COUNTRY_TIMEZONE = "Europe/Amsterdam"  # This is what we receive, even if ENTSO-E documents Europe/Brussels
+DEFAULT_DATA_SOURCE_NAME = "ENTSO-E"
 DEFAULT_DERIVED_DATA_SOURCE = "FlexMeasures ENTSO-E"
 
 __version__ = "0.9"
@@ -37,6 +38,11 @@ __settings__ = {
         description="String used to name the source of data that this plugin derives from ENTSO-E data, like a CO₂ signal.",
         level="info",
         message_if_missing=f"'{DEFAULT_DERIVED_DATA_SOURCE}' will be used as a default.",
+    ),
+    "ENTSOE_DATA_SOURCE_NAME": dict(
+        description="String used to name the ENTSO-E data source and the account associated with it.",
+        level="info",
+        message_if_missing=f"'{DEFAULT_DATA_SOURCE_NAME}' will be used as a default.",
     ),
 }
 

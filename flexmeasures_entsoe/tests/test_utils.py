@@ -3,9 +3,13 @@ import pytest
 import pandas as pd
 import click
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
+from flexmeasures_entsoe import DEFAULT_DATA_SOURCE_NAME, DEFAULT_DERIVED_DATA_SOURCE
 from flexmeasures_entsoe.utils import (
     abort_if_data_incomplete,
+    ensure_data_source,
+    ensure_data_source_for_derived_data,
     parse_from_and_to_dates,
 )
 
@@ -83,3 +87,89 @@ def test_parse_from_and_to_dates():
     assert e_none - s_none == timedelta(days=2)
     assert s_none == today
     assert e_none == today + timedelta(days=2)
+
+
+def test_ensure_data_source_passes_entsoe_account_when_supported(monkeypatch):
+    """Test that ensure_data_source() creates a market-type source
+    and passes the ENTSO-E account when supported."""
+    from flask import Flask
+
+    app = Flask(__name__)
+    captured_kwargs = {}
+
+    def fake_get_or_create_source(source, source_type, account, flush):
+        captured_kwargs.update(
+            dict(
+                source=source,
+                source_type=source_type,
+                account=account,
+                flush=flush,
+            )
+        )
+        return SimpleNamespace(type=source_type, account=account, name=source)
+
+    fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
+        True,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
+        lambda: fake_account,
+    )
+
+    with app.app_context():
+        data_source = ensure_data_source()
+
+    assert data_source.type == "market"
+    assert captured_kwargs["source"] == DEFAULT_DATA_SOURCE_NAME
+    assert captured_kwargs["account"].name == DEFAULT_DATA_SOURCE_NAME
+
+
+def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supported(
+    monkeypatch,
+):
+    """Test that ensure_data_source_for_derived_data() passes the ENTSO-E account
+    when supported."""
+    from flask import Flask
+
+    app = Flask(__name__)
+    captured_kwargs = {}
+
+    def fake_get_or_create_source(source, source_type, account, flush):
+        captured_kwargs.update(
+            dict(
+                source=source,
+                source_type=source_type,
+                account=account,
+                flush=flush,
+            )
+        )
+        return SimpleNamespace(type=source_type, account=account, name=source)
+
+    fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
+        True,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
+        lambda: fake_account,
+    )
+
+    with app.app_context():
+        data_source = ensure_data_source_for_derived_data()
+
+    assert data_source.type == "forecasting script"
+    assert captured_kwargs["source"] == DEFAULT_DERIVED_DATA_SOURCE
+    assert captured_kwargs["account"].name == DEFAULT_DATA_SOURCE_NAME
