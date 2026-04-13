@@ -1,4 +1,3 @@
-import inspect
 from typing import Dict, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from logging import Logger
@@ -11,10 +10,9 @@ import click
 import pytz
 import entsoe
 
-from flexmeasures.data.utils import save_to_db
-from flexmeasures import Account, Asset, AssetType, Sensor, Source
+from flexmeasures.data.utils import get_data_source, save_to_db
+from flexmeasures import Asset, AssetType, Sensor, Source
 from flexmeasures.data import db
-from flexmeasures.data.services.data_sources import get_or_create_source
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
 from flexmeasures.cli.utils import MsgStyle
@@ -25,52 +23,123 @@ from . import (
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 
-SUPPORTS_SOURCE_ACCOUNT = (
-    "account" in inspect.signature(get_or_create_source).parameters
-)
+
+def _get_source_factory():
+    """Return the newer source factory when FlexMeasures exposes it."""
+    try:
+        from flexmeasures.data.services.data_sources import get_or_create_source
+    except ImportError:
+        return None
+    return get_or_create_source
 
 
-def get_or_create_entsoe_account() -> Account:
+def _supports_source_account(source_factory) -> bool:
+    """Detect support for the account kwarg without failing at import time."""
+    if source_factory is None:
+        return False
+    try:
+        import inspect
+
+        return "account" in inspect.signature(source_factory).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _get_account_model():
+    try:
+        from flexmeasures import Account
+    except ImportError:
+        return None
+    return Account
+
+
+def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
+    return (
+        Source.query.filter(
+            Source.name == source_name,
+            Source.type == source_type,
+        )
+        .order_by(Source.id)
+        .first()
+    )
+
+
+def get_or_create_entsoe_account():
     """Make sure we have an account for the ENTSO-E provider service."""
+    account_model = _get_account_model()
+    if account_model is None:
+        raise RuntimeError("FlexMeasures Account model is unavailable.")
     account_name = current_app.config.get(
         "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
     )
-    entsoe_account = Account.query.filter(
-        Account.name == account_name,
+    entsoe_account = account_model.query.filter(
+        account_model.name == account_name,
     ).one_or_none()
     if entsoe_account is None:
-        entsoe_account = Account(name=account_name)
+        entsoe_account = account_model(name=account_name)
         db.session.add(entsoe_account)
         db.session.flush()
     return entsoe_account
 
 
+def _ensure_entsoe_source(
+    source_name: str,
+    source_type: str,
+    legacy_source_type: Optional[str] = None,
+) -> Source:
+    """Reuse legacy sources when possible and only rely on newer APIs lazily."""
+    source_factory = _get_source_factory()
+    supports_source_account = _supports_source_account(source_factory)
+    entsoe_account = None
+    if supports_source_account:
+        entsoe_account = get_or_create_entsoe_account()
+
+    existing_source = _find_existing_source(source_name, source_type)
+    if existing_source is None and legacy_source_type is not None:
+        existing_source = _find_existing_source(source_name, legacy_source_type)
+        if existing_source is not None:
+            existing_source.type = source_type
+
+    if existing_source is not None:
+        if entsoe_account is not None and getattr(existing_source, "account", None) is None:
+            existing_source.account = entsoe_account
+        return existing_source
+
+    if source_factory is None:
+        return get_data_source(
+            data_source_name=source_name,
+            data_source_type=source_type,
+        )
+
+    source_kwargs = dict(
+        source=source_name,
+        source_type=source_type,
+        flush=False,
+    )
+    if entsoe_account is not None:
+        source_kwargs["account"] = entsoe_account
+    return source_factory(**source_kwargs)
+
+
 def ensure_data_source() -> Source:
     """Make sure we have a raw ENTSO-E data source of type "market"."""
-    source_kwargs = dict(
-        source=current_app.config.get(
+    return _ensure_entsoe_source(
+        source_name=current_app.config.get(
             "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
         ),
         source_type="market",
-        flush=False,
+        legacy_source_type="forecasting script",
     )
-    if SUPPORTS_SOURCE_ACCOUNT:
-        source_kwargs["account"] = get_or_create_entsoe_account()
-    return get_or_create_source(**source_kwargs)
 
 
 def ensure_data_source_for_derived_data() -> Source:
     """Make sure we have a data source for data derived from ENTSO-E data."""
-    source_kwargs = dict(
-        source=current_app.config.get(
+    return _ensure_entsoe_source(
+        source_name=current_app.config.get(
             "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
         ),
         source_type="forecasting script",
-        flush=False,
     )
-    if SUPPORTS_SOURCE_ACCOUNT:
-        source_kwargs["account"] = get_or_create_entsoe_account()
-    return get_or_create_source(**source_kwargs)
 
 
 def ensure_transmission_zone_asset(country_code: str) -> Asset:
