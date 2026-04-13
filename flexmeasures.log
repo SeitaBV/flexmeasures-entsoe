@@ -1,3 +1,0 @@
-[FLEXMEASURES][2026-04-13 12:57:05,393] INFO: Starting FlexMeasures app in 'production' environment ... [logged in /home/runner/.local/lib/python3.12/site-packages/flexmeasures/app.py:66]
-[FLEXMEASURES][2026-04-13 12:57:05,394] INFO: Loading config from /home/runner/.local/var/flexmeasures-instance/flexmeasures.cfg ... [logged in /home/runner/.local/lib/python3.12/site-packages/flexmeasures/utils/config_utils.py:205]
-[FLEXMEASURES][2026-04-13 12:57:05,394] WARNING: File /home/runner/.local/var/flexmeasures-instance/flexmeasures.cfg could not be found! (work dir is /home/runner/work/flexmeasures-entsoe/flexmeasures-entsoe) [logged in /home/runner/.local/lib/python3.12/site-packages/flexmeasures/utils/config_utils.py:209]
