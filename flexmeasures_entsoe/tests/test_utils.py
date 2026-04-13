@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from flexmeasures_entsoe import DEFAULT_DATA_SOURCE_NAME, DEFAULT_DERIVED_DATA_SOURCE
 from flexmeasures_entsoe.utils import (
+    _ensure_entsoe_source,
     abort_if_data_incomplete,
     ensure_data_source,
     ensure_data_source_for_derived_data,
@@ -111,12 +112,16 @@ def test_ensure_data_source_passes_entsoe_account_when_supported(monkeypatch):
     fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.get_or_create_source",
-        fake_get_or_create_source,
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: fake_get_or_create_source,
     )
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
-        True,
+        "flexmeasures_entsoe.utils._supports_source_account",
+        lambda source_factory: True,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        lambda source_name, source_type: None,
     )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
@@ -155,12 +160,16 @@ def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supporte
     fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.get_or_create_source",
-        fake_get_or_create_source,
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: fake_get_or_create_source,
     )
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
-        True,
+        "flexmeasures_entsoe.utils._supports_source_account",
+        lambda source_factory: True,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        lambda source_name, source_type: None,
     )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
@@ -194,12 +203,16 @@ def test_ensure_data_source_omits_account_when_not_supported(monkeypatch):
         return SimpleNamespace(type=source_type, name=source)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.get_or_create_source",
-        fake_get_or_create_source,
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: fake_get_or_create_source,
     )
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
-        False,
+        "flexmeasures_entsoe.utils._supports_source_account",
+        lambda source_factory: False,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        lambda source_name, source_type: None,
     )
 
     with app.app_context():
@@ -231,12 +244,16 @@ def test_ensure_data_source_for_derived_data_omits_account_when_not_supported(
         return SimpleNamespace(type=source_type, name=source)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.get_or_create_source",
-        fake_get_or_create_source,
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: fake_get_or_create_source,
     )
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
-        False,
+        "flexmeasures_entsoe.utils._supports_source_account",
+        lambda source_factory: False,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        lambda source_name, source_type: None,
     )
 
     with app.app_context():
@@ -245,3 +262,82 @@ def test_ensure_data_source_for_derived_data_omits_account_when_not_supported(
     assert data_source.type == "forecasting script"
     assert captured_kwargs["source"] == DEFAULT_DERIVED_DATA_SOURCE
     assert "account" not in captured_kwargs
+
+
+def test_ensure_entsoe_source_reuses_legacy_source_and_sets_account(monkeypatch):
+    legacy_source = SimpleNamespace(
+        name=DEFAULT_DATA_SOURCE_NAME,
+        type="forecasting script",
+        account=None,
+    )
+    fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._supports_source_account",
+        lambda source_factory: True,
+    )
+
+    def fake_find_existing_source(source_name, source_type):
+        if source_type == "market":
+            return None
+        if source_type == "forecasting script":
+            return legacy_source
+        return None
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        fake_find_existing_source,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
+        lambda: fake_account,
+    )
+
+    data_source = _ensure_entsoe_source(
+        source_name=DEFAULT_DATA_SOURCE_NAME,
+        source_type="market",
+        legacy_source_type="forecasting script",
+    )
+
+    assert data_source is legacy_source
+    assert data_source.type == "market"
+    assert data_source.account is fake_account
+
+
+def test_ensure_entsoe_source_falls_back_to_legacy_get_data_source(monkeypatch):
+    captured_kwargs = {}
+
+    def fake_get_data_source(data_source_name, data_source_type):
+        captured_kwargs.update(
+            data_source_name=data_source_name,
+            data_source_type=data_source_type,
+        )
+        return SimpleNamespace(name=data_source_name, type=data_source_type)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._get_source_factory",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils._find_existing_source",
+        lambda source_name, source_type: None,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_data_source",
+        fake_get_data_source,
+    )
+
+    data_source = _ensure_entsoe_source(
+        source_name=DEFAULT_DATA_SOURCE_NAME,
+        source_type="market",
+    )
+
+    assert data_source.type == "market"
+    assert captured_kwargs == {
+        "data_source_name": DEFAULT_DATA_SOURCE_NAME,
+        "data_source_type": "market",
+    }
