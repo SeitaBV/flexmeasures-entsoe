@@ -173,3 +173,75 @@ def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supporte
     assert data_source.type == "forecasting script"
     assert captured_kwargs["source"] == DEFAULT_DERIVED_DATA_SOURCE
     assert captured_kwargs["account"].name == DEFAULT_DATA_SOURCE_NAME
+
+
+def test_ensure_data_source_omits_account_when_not_supported(monkeypatch):
+    """Test that ensure_data_source() does not pass account
+    when FlexMeasures does not support it."""
+    from flask import Flask
+
+    app = Flask(__name__)
+    captured_kwargs = {}
+
+    def fake_get_or_create_source(source, source_type, flush):
+        captured_kwargs.update(
+            dict(
+                source=source,
+                source_type=source_type,
+                flush=flush,
+            )
+        )
+        return SimpleNamespace(type=source_type, name=source)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
+        False,
+    )
+
+    with app.app_context():
+        data_source = ensure_data_source()
+
+    assert data_source.type == "market"
+    assert captured_kwargs["source"] == DEFAULT_DATA_SOURCE_NAME
+    assert "account" not in captured_kwargs
+
+
+def test_ensure_data_source_for_derived_data_omits_account_when_not_supported(
+    monkeypatch,
+):
+    """Test that ensure_data_source_for_derived_data() does not pass account
+    when FlexMeasures does not support it."""
+    from flask import Flask
+
+    app = Flask(__name__)
+    captured_kwargs = {}
+
+    def fake_get_or_create_source(source, source_type, flush):
+        captured_kwargs.update(
+            dict(
+                source=source,
+                source_type=source_type,
+                flush=flush,
+            )
+        )
+        return SimpleNamespace(type=source_type, name=source)
+
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.SUPPORTS_SOURCE_ACCOUNT",
+        False,
+    )
+
+    with app.app_context():
+        data_source = ensure_data_source_for_derived_data()
+
+    assert data_source.type == "forecasting script"
+    assert captured_kwargs["source"] == DEFAULT_DERIVED_DATA_SOURCE
+    assert "account" not in captured_kwargs
