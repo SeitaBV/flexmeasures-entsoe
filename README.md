@@ -73,7 +73,7 @@ or, if you want to keep these sensors in their original resolution, and find tha
 
 First of all, this is a FlexMeasures plugin. Consult the FlexMeasures documentation for setup.
 
-1. Add the plugin to [the `FLEXMEASURES_PLUGINS` setting](https://flexmeasures.readthedocs.io/en/latest/configuration.html#plugin-config). Either use `/path/to/flexmeasures-entsoe/flexmeasures_entsoe` or `flexmeasures_entsoe` if you installed this as a package locally (see below).
+1. Add the plugin to [the `FLEXMEASURES_PLUGINS` setting](https://flexmeasures.readthedocs.io/stable/configuration.html#flexmeasures-plugins). Either use `/path/to/flexmeasures-entsoe/flexmeasures_entsoe` or `flexmeasures_entsoe` if you installed this as a package locally (see below).
 
 2. Add `ENTSOE_AUTH_TOKEN` to your FlexMeasures config (e.g. ~/.flexmeasures.cfg).
 You can generate this token after you made an account at ENTSO-E, read more [here](https://transparencyplatform.zendesk.com/hc/en-us/articles/12845911031188-How-to-get-security-token). 
