@@ -4,6 +4,7 @@ from logging import Logger
 
 from entsoe import EntsoePandasClient
 from flask import current_app
+from packaging import version
 from pandas.tseries.frequencies import to_offset
 import pandas as pd
 import click
@@ -11,7 +12,7 @@ import pytz
 import entsoe
 
 from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures import Asset, AssetType, Sensor, Source
+from flexmeasures import Asset, AssetType, Sensor, Source, __version__ as flexmeasures_version
 from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
@@ -23,34 +24,15 @@ from . import (
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 
+FM_SUPPORTS_ACCOUNT_LINKED_SOURCES = version.parse(
+    flexmeasures_version
+) >= version.parse("0.32")
 
-def _get_source_factory():
-    """Return the newer source factory when FlexMeasures exposes it."""
-    try:
-        from flexmeasures.data.services.data_sources import get_or_create_source
-    except ImportError:
-        return None
-    return get_or_create_source
-
-
-def _supports_source_account(source_factory) -> bool:
-    """Detect support for the account kwarg without failing at import time."""
-    if source_factory is None:
-        return False
-    try:
-        import inspect
-
-        return "account" in inspect.signature(source_factory).parameters
-    except (TypeError, ValueError):
-        return False
-
-
-def _get_account_model():
-    try:
-        from flexmeasures import Account
-    except ImportError:
-        return None
-    return Account
+if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
+    from flexmeasures import Account
+    from flexmeasures.data.services.data_sources import get_or_create_source
+else:
+    Account = None
 
 
 def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
@@ -66,17 +48,16 @@ def _find_existing_source(source_name: str, source_type: str) -> Optional[Source
 
 def get_or_create_entsoe_account():
     """Make sure we have an account for the ENTSO-E provider service."""
-    account_model = _get_account_model()
-    if account_model is None:
+    if Account is None:
         raise RuntimeError("FlexMeasures Account model is unavailable.")
     account_name = current_app.config.get(
         "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
     )
-    entsoe_account = account_model.query.filter(
-        account_model.name == account_name,
+    entsoe_account = Account.query.filter(
+        Account.name == account_name,
     ).one_or_none()
     if entsoe_account is None:
-        entsoe_account = account_model(name=account_name)
+        entsoe_account = Account(name=account_name)
         db.session.add(entsoe_account)
         db.session.flush()
     return entsoe_account
@@ -87,11 +68,9 @@ def _ensure_entsoe_source(
     source_type: str,
     legacy_source_type: Optional[str] = None,
 ) -> Source:
-    """Reuse legacy sources when possible and only rely on newer APIs lazily."""
-    source_factory = _get_source_factory()
-    supports_source_account = _supports_source_account(source_factory)
+    """Reuse legacy sources when possible while branching explicitly on FM version."""
     entsoe_account = None
-    if supports_source_account:
+    if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
         entsoe_account = get_or_create_entsoe_account()
 
     existing_source = _find_existing_source(source_name, source_type)
@@ -105,7 +84,7 @@ def _ensure_entsoe_source(
             existing_source.account = entsoe_account
         return existing_source
 
-    if source_factory is None:
+    if not FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
         return get_data_source(
             data_source_name=source_name,
             data_source_type=source_type,
@@ -118,7 +97,7 @@ def _ensure_entsoe_source(
     )
     if entsoe_account is not None:
         source_kwargs["account"] = entsoe_account
-    return source_factory(**source_kwargs)
+    return get_or_create_source(**source_kwargs)
 
 
 def ensure_data_source() -> Source:
