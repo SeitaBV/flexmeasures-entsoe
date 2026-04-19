@@ -1,12 +1,14 @@
-import pytz
-import pytest
-import pandas as pd
-import click
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
+import click
+import pandas as pd
+import pytz
+import pytest
+
 from flexmeasures_entsoe import DEFAULT_DATA_SOURCE_NAME, DEFAULT_DERIVED_DATA_SOURCE
 from flexmeasures_entsoe.utils import (
+    FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
     _ensure_entsoe_source,
     abort_if_data_incomplete,
     ensure_data_source,
@@ -90,9 +92,15 @@ def test_parse_from_and_to_dates():
     assert e_none == today + timedelta(days=2)
 
 
+# The version-branch tests below still use monkeypatching to isolate source
+# creation side effects and to simulate upgrade reuse of legacy ENTSO-E
+# sources without requiring multiple FlexMeasures installs in one test run.
+@pytest.mark.skipif(
+    not FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
+    reason="Account-linked ENTSO-E sources are only supported on FlexMeasures >= 0.32.",
+)
 def test_ensure_data_source_passes_entsoe_account_when_supported(monkeypatch):
-    """Test that ensure_data_source() creates a market-type source
-    and passes the ENTSO-E account when supported."""
+    """Test that ensure_data_source() creates a market-type source and passes the ENTSO-E account."""
     from flask import Flask
 
     app = Flask(__name__)
@@ -112,12 +120,8 @@ def test_ensure_data_source_passes_entsoe_account_when_supported(monkeypatch):
     fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: fake_get_or_create_source,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._supports_source_account",
-        lambda source_factory: True,
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
     )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils._find_existing_source",
@@ -136,11 +140,14 @@ def test_ensure_data_source_passes_entsoe_account_when_supported(monkeypatch):
     assert captured_kwargs["account"].name == DEFAULT_DATA_SOURCE_NAME
 
 
+@pytest.mark.skipif(
+    not FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
+    reason="Account-linked ENTSO-E sources are only supported on FlexMeasures >= 0.32.",
+)
 def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supported(
     monkeypatch,
 ):
-    """Test that ensure_data_source_for_derived_data() passes the ENTSO-E account
-    when supported."""
+    """Test that ensure_data_source_for_derived_data() passes the ENTSO-E account."""
     from flask import Flask
 
     app = Flask(__name__)
@@ -160,12 +167,8 @@ def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supporte
     fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
 
     monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: fake_get_or_create_source,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._supports_source_account",
-        lambda source_factory: True,
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        fake_get_or_create_source,
     )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils._find_existing_source",
@@ -184,86 +187,86 @@ def test_ensure_data_source_for_derived_data_passes_entsoe_account_when_supporte
     assert captured_kwargs["account"].name == DEFAULT_DATA_SOURCE_NAME
 
 
+@pytest.mark.skipif(
+    FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
+    reason="Legacy get_data_source fallback is only used on FlexMeasures < 0.32.",
+)
 def test_ensure_data_source_omits_account_when_not_supported(monkeypatch):
-    """Test that ensure_data_source() does not pass account
-    when FlexMeasures does not support it."""
+    """Test that ensure_data_source() falls back to the legacy source factory without an account."""
     from flask import Flask
 
     app = Flask(__name__)
     captured_kwargs = {}
 
-    def fake_get_or_create_source(source, source_type, flush):
+    def fake_get_data_source(data_source_name, data_source_type):
         captured_kwargs.update(
-            dict(
-                source=source,
-                source_type=source_type,
-                flush=flush,
-            )
+            data_source_name=data_source_name,
+            data_source_type=data_source_type,
         )
-        return SimpleNamespace(type=source_type, name=source)
+        return SimpleNamespace(name=data_source_name, type=data_source_type)
 
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: fake_get_or_create_source,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._supports_source_account",
-        lambda source_factory: False,
-    )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils._find_existing_source",
         lambda source_name, source_type: None,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_data_source",
+        fake_get_data_source,
     )
 
     with app.app_context():
         data_source = ensure_data_source()
 
     assert data_source.type == "market"
-    assert captured_kwargs["source"] == DEFAULT_DATA_SOURCE_NAME
-    assert "account" not in captured_kwargs
+    assert captured_kwargs == {
+        "data_source_name": DEFAULT_DATA_SOURCE_NAME,
+        "data_source_type": "market",
+    }
 
 
+@pytest.mark.skipif(
+    FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
+    reason="Legacy get_data_source fallback is only used on FlexMeasures < 0.32.",
+)
 def test_ensure_data_source_for_derived_data_omits_account_when_not_supported(
     monkeypatch,
 ):
-    """Test that ensure_data_source_for_derived_data() does not pass account
-    when FlexMeasures does not support it."""
+    """Test that ensure_data_source_for_derived_data() falls back to the legacy source factory."""
     from flask import Flask
 
     app = Flask(__name__)
     captured_kwargs = {}
 
-    def fake_get_or_create_source(source, source_type, flush):
+    def fake_get_data_source(data_source_name, data_source_type):
         captured_kwargs.update(
-            dict(
-                source=source,
-                source_type=source_type,
-                flush=flush,
-            )
+            data_source_name=data_source_name,
+            data_source_type=data_source_type,
         )
-        return SimpleNamespace(type=source_type, name=source)
+        return SimpleNamespace(name=data_source_name, type=data_source_type)
 
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: fake_get_or_create_source,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._supports_source_account",
-        lambda source_factory: False,
-    )
     monkeypatch.setattr(
         "flexmeasures_entsoe.utils._find_existing_source",
         lambda source_name, source_type: None,
+    )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_data_source",
+        fake_get_data_source,
     )
 
     with app.app_context():
         data_source = ensure_data_source_for_derived_data()
 
     assert data_source.type == "forecasting script"
-    assert captured_kwargs["source"] == DEFAULT_DERIVED_DATA_SOURCE
-    assert "account" not in captured_kwargs
+    assert captured_kwargs == {
+        "data_source_name": DEFAULT_DERIVED_DATA_SOURCE,
+        "data_source_type": "forecasting script",
+    }
 
 
+@pytest.mark.skipif(
+    not FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
+    reason="Legacy source upgrade reuse matters in the account-linked source path only.",
+)
 def test_ensure_entsoe_source_reuses_legacy_source_and_sets_account(monkeypatch):
     legacy_source = SimpleNamespace(
         name=DEFAULT_DATA_SOURCE_NAME,
@@ -271,15 +274,6 @@ def test_ensure_entsoe_source_reuses_legacy_source_and_sets_account(monkeypatch)
         account=None,
     )
     fake_account = SimpleNamespace(name=DEFAULT_DATA_SOURCE_NAME)
-
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: object(),
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._supports_source_account",
-        lambda source_factory: True,
-    )
 
     def fake_find_existing_source(source_name, source_type):
         if source_type == "market":
@@ -296,6 +290,12 @@ def test_ensure_entsoe_source_reuses_legacy_source_and_sets_account(monkeypatch)
         "flexmeasures_entsoe.utils.get_or_create_entsoe_account",
         lambda: fake_account,
     )
+    monkeypatch.setattr(
+        "flexmeasures_entsoe.utils.get_or_create_source",
+        lambda **kwargs: pytest.fail(
+            "Should reuse a legacy ENTSO-E source before creating a new one."
+        ),
+    )
 
     data_source = _ensure_entsoe_source(
         source_name=DEFAULT_DATA_SOURCE_NAME,
@@ -306,38 +306,3 @@ def test_ensure_entsoe_source_reuses_legacy_source_and_sets_account(monkeypatch)
     assert data_source is legacy_source
     assert data_source.type == "market"
     assert data_source.account is fake_account
-
-
-def test_ensure_entsoe_source_falls_back_to_legacy_get_data_source(monkeypatch):
-    captured_kwargs = {}
-
-    def fake_get_data_source(data_source_name, data_source_type):
-        captured_kwargs.update(
-            data_source_name=data_source_name,
-            data_source_type=data_source_type,
-        )
-        return SimpleNamespace(name=data_source_name, type=data_source_type)
-
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._get_source_factory",
-        lambda: None,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils._find_existing_source",
-        lambda source_name, source_type: None,
-    )
-    monkeypatch.setattr(
-        "flexmeasures_entsoe.utils.get_data_source",
-        fake_get_data_source,
-    )
-
-    data_source = _ensure_entsoe_source(
-        source_name=DEFAULT_DATA_SOURCE_NAME,
-        source_type="market",
-    )
-
-    assert data_source.type == "market"
-    assert captured_kwargs == {
-        "data_source_name": DEFAULT_DATA_SOURCE_NAME,
-        "data_source_type": "market",
-    }
