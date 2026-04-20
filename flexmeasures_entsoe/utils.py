@@ -31,8 +31,6 @@ FM_SUPPORTS_ACCOUNT_LINKED_SOURCES = version.parse(
 if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
     from flexmeasures import Account
     from flexmeasures.data.services.data_sources import get_or_create_source
-else:
-    Account = None
 
 
 def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
@@ -48,8 +46,6 @@ def _find_existing_source(source_name: str, source_type: str) -> Optional[Source
 
 def get_or_create_entsoe_account():
     """Make sure we have an account for the ENTSO-E provider service."""
-    if Account is None:
-        raise RuntimeError("FlexMeasures Account model is unavailable.")
     account_name = current_app.config.get(
         "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
     )
