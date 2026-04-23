@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "flexmeasures-entsoe"
 description = "Integrating FlexMeasures with ENTSO-E"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = [
     "LICENSE",
@@ -20,7 +20,6 @@ classifiers = [
     "Environment :: Web Environment",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

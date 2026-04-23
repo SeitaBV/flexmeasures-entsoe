@@ -110,7 +110,10 @@ This plugin targets two distinct FlexMeasures capability tiers:
 | `< 0.32` | Uses the legacy `get_data_source` factory; no account is linked to the ENTSO-E source. |
 | `>= 0.32` | Uses the account-linked source API (`get_or_create_source` with an `Account`). |
 
-CI is run against `0.31.3` (representative legacy release) and `0.32.0` (first account-linked release) across all supported Python versions (3.9 - 3.12).
+This package supports Python 3.10 through 3.12, following the Python support policy of the currently supported FlexMeasures releases.
+
+The oldest supported FlexMeasures release line is `0.31.*`.
+CI is run against `0.31.*` (minimum supported legacy release), `0.32.*` (first account-linked release), and the latest released FlexMeasures version across all supported Python versions.
 When a new FlexMeasures release introduces breaking changes the matrix should be updated accordingly.
 
 
