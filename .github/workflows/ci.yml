@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: "Python ${{ matrix.python-version }} / FlexMeasures ${{ matrix.flexmeasures-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        flexmeasures-version:
+          - "0.31.3"  # latest release before account-linked source support (< 0.32)
+          - "0.32.0"  # first release with account-linked source support (>= 0.32)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements/app.in -r requirements/test.in
+          pip install "flexmeasures==${{ matrix.flexmeasures-version }}"
+          pip install -e .
+
+      - name: Run tests
+        run: python -m pytest flexmeasures_entsoe/tests/

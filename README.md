@@ -101,6 +101,19 @@ In that case, this plugin will look for the auth token in the config setting ``E
 Note, however, that ENTSO-E usually does not seem to make the latest data available there. Asking for the next day can often get an empty response.
 
 
+## Supported FlexMeasures versions
+
+This plugin targets two distinct FlexMeasures capability tiers:
+
+| FlexMeasures version | Behavior |
+|---|---|
+| `< 0.32` | Uses the legacy `get_data_source` factory; no account is linked to the ENTSO-E source. |
+| `>= 0.32` | Uses the account-linked source API (`get_or_create_source` with an `Account`). |
+
+CI is run against `0.31.3` (representative legacy release) and `0.32.0` (first account-linked release) across all supported Python versions (3.9 - 3.12).
+When a new FlexMeasures release introduces breaking changes the matrix should be updated accordingly.
+
+
 ## Development
 
 To keep our code quality high, we use pre-commit:
