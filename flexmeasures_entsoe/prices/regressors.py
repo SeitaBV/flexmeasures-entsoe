@@ -12,16 +12,17 @@ Research on the Dutch (NL) day-ahead market established that ENTSO-E day-ahead
 - **Generation outages** (day-ahead-known unavailable capacity) are a weaker, but
   physically relevant, regressor for scarcity.
 
-This module only holds the *pure* helpers (outage aggregation and residual-load
-derivation) and the sensor specifications, so it can be imported and unit-tested without
-a FlexMeasures app or database. The orchestration (querying ENTSO-E and saving beliefs)
-lives in ``day_ahead.py``.
+This module only holds the *pure* helpers (outage aggregation, residual-load derivation,
+neighbour lookup and timezone lookup) and the sensor specifications, so it can be imported
+and unit-tested without a FlexMeasures app or database. The orchestration (querying
+ENTSO-E and saving beliefs) lives in ``regressors_import.py``.
 """
 
 from datetime import timedelta
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
+from entsoe.mappings import NEIGHBOURS, lookup_area
 
 
 # Machine-readable choices for the CLI and the names of the sensors each regressor
@@ -46,21 +47,37 @@ OUTAGES_SENSOR_SPEC = ("Generation outages", "MW", timedelta(hours=1), True)
 GREEN_COLUMNS = ("Solar", "Wind Offshore", "Wind Onshore")
 
 
-# Interconnected neighbours per price country, defined by (day-ahead) interconnector.
-#
-# A €500+/MWh NL scarcity spike is usually a *regional* NW-European event: when Germany,
-# Belgium, Great Britain and the Nordics are tight at the same time, imports into NL dry
-# up. The neighbours' own day-ahead residual-load forecasts therefore measurably improve
-# NL spike and evening-peak price forecasts. When --include-neighbours is set, each
-# selected regressor (except domestic outages) is also fetched and saved for these
-# neighbours, into per-country sensors (e.g. "Residual load (DE_LU)").
-#
-# Countries not listed here (or mapped to an empty list) simply make --include-neighbours
-# a no-op rather than an error.
-# TODO: populate the neighbour sets for price countries other than NL.
-INTERCONNECTED_NEIGHBOURS = {
-    "NL": ["DE_LU", "BE", "GB", "NO_2", "DK_1"],
-}
+def neighbours_for(country_code: str) -> List[str]:
+    """Interconnected neighbours of a country/bidding-zone, per ENTSO-E's own mapping.
+
+    A €500+/MWh NL scarcity spike is usually a *regional* NW-European event: when Germany,
+    Belgium, Great Britain and the Nordics are tight at the same time, imports into NL dry
+    up. The neighbours' own day-ahead residual-load forecasts therefore measurably improve
+    NL spike and evening-peak price forecasts.
+
+    The neighbour set is taken directly from ``entsoe.mappings.NEIGHBOURS`` (a maintained
+    upstream dict of area -> interconnected areas), rather than hand-maintained here, so it
+    covers every country and tracks interconnection changes as the library is updated. For
+    NL this yields e.g. BE, DE_LU, DE_AT_LU, GB, NO_2 and DK_1. The entries are already the
+    (bidding-zone) codes that the ``query_*`` functions accept via ``lookup_area``; a code
+    with no day-ahead data (e.g. the deprecated DE_AT_LU zone) is simply skipped at import
+    time by the lenient neighbour fetch. Unknown countries return an empty list, so the
+    ``--include-neighbours`` flag is a harmless no-op for them rather than an error.
+    """
+    return list(NEIGHBOURS.get(country_code, []))
+
+
+def timezone_for(country_code: str) -> Optional[str]:
+    """Return the IANA timezone of a country/bidding-zone code, per entsoe-py's Area enum.
+
+    Used so each country's sensors carry their *own* timezone as metadata (e.g. NL/DE/BE ->
+    Europe/…, GB -> Europe/London, NO_2 -> Europe/Oslo, DK_1 -> Europe/Copenhagen). Returns
+    None if the code is not a known ENTSO-E area.
+    """
+    try:
+        return lookup_area(country_code).tz
+    except (KeyError, ValueError):
+        return None
 
 
 def compute_residual_load(

@@ -91,19 +91,34 @@ def test_compute_residual_load_without_any_green_equals_load():
 # ---------------------------------------------------------------------------
 
 
-def test_interconnected_neighbours_for_nl():
-    assert regressors.INTERCONNECTED_NEIGHBOURS["NL"] == [
-        "DE_LU",
-        "BE",
-        "GB",
-        "NO_2",
-        "DK_1",
-    ]
+def test_neighbours_for_nl_comes_from_entsoe_mapping():
+    # Sourced from entsoe.mappings.NEIGHBOURS, so it covers the NW-European interconnectors.
+    neighbours = regressors.neighbours_for("NL")
+    for expected in ("BE", "DE_LU", "GB", "NO_2", "DK_1"):
+        assert expected in neighbours
 
 
-def test_interconnected_neighbours_unknown_country_defaults_to_empty():
-    # The command uses .get(country, []) so unlisted countries are a no-op, not an error.
-    assert regressors.INTERCONNECTED_NEIGHBOURS.get("XX", []) == []
+def test_neighbours_for_unknown_country_is_empty():
+    # Unlisted countries make --include-neighbours a no-op, not an error.
+    assert regressors.neighbours_for("XX") == []
+
+
+def test_neighbours_for_returns_a_fresh_list():
+    # Callers must not be able to mutate the library's mapping.
+    first = regressors.neighbours_for("NL")
+    first.append("ZZ")
+    assert "ZZ" not in regressors.neighbours_for("NL")
+
+
+def test_timezone_for_known_zones():
+    assert regressors.timezone_for("NL") == "Europe/Amsterdam"
+    assert regressors.timezone_for("GB") == "Europe/London"
+    assert regressors.timezone_for("NO_2") == "Europe/Oslo"
+    assert regressors.timezone_for("DK_1") == "Europe/Copenhagen"
+
+
+def test_timezone_for_unknown_zone_is_none():
+    assert regressors.timezone_for("not-a-zone") is None
 
 
 def test_green_column_returns_none_when_forecast_is_none():

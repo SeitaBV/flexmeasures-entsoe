@@ -42,17 +42,23 @@ The flags are independent, so you can import just what you need, e.g. only resid
 
     flexmeasures entsoe import-day-ahead-prices --include-residual-load
 
+Or use `--include-all` as a shorthand for "import everything" (all regressors *and* neighbours):
+
+    flexmeasures entsoe import-day-ahead-prices --include-all
+
 | Flag | Sensor(s) created/used | Unit | Source |
 | --- | --- | --- | --- |
 | `--include-load-forecast` | `Day-ahead load forecast` | MW | ENTSO-E |
 | `--include-wind-solar-forecast` | `Solar`, `Wind Onshore`, `Wind Offshore` (shared with the generation import) | MW | ENTSO-E |
 | `--include-residual-load` | `Residual load` | MW | derived (`ENTSOE_DERIVED_DATA_SOURCE`) |
 | `--include-outages` | `Generation outages` | MW | ENTSO-E |
-| `--include-neighbours` | The selected regressors above (except outages), per neighbour, e.g. `Residual load (DE_LU)` | MW | ENTSO-E / derived |
+| `--include-neighbours` | The selected regressors above (except outages), for each neighbour, on the neighbour's own transmission-zone asset | MW | ENTSO-E / derived |
+| `--include-all` | Shorthand: turns on all of the above (every regressor **and** `--include-neighbours`) | MW | ENTSO-E / derived |
 
 Notes:
 
 - `--include-residual-load` implies fetching both the load forecast and the wind & solar forecast (it needs them to derive residual load), but it only *saves* those series if their own flag is also set.
+- `--include-all` composes with the individual flags — setting it simply forces everything on.
 - Each single-sensor regressor can be pointed at a specific existing sensor with `--load-forecast-sensor`, `--residual-load-sensor` and `--outages-sensor` (by sensor ID). Otherwise a sensibly-named sensor is created/looked up automatically.
 - **Generation outages and the day-ahead knowledge horizon.** For each target hour we sum the unavailable capacity (`nominal_power − avail_qty`) of every outage overlapping that hour, but *only* if the outage was **published (`created_doc_time`) before that hour's delivery day** (local midnight). Day-ahead prices are set with only the information known before the delivery day, so counting an outage announced on or after the delivery day would leak look-ahead information into the regressor. The publication time is checked per target hour, so a multi-day range aggregates correctly without leaking.
 
@@ -64,10 +70,12 @@ Add `--include-neighbours` to *also* pull the selected regressors (all except ou
         --include-residual-load \
         --include-neighbours
 
-For NL, the neighbours are `DE_LU`, `BE`, `GB`, `NO_2` and `DK_1` (defined by interconnector in `INTERCONNECTED_NEIGHBOURS` in `flexmeasures_entsoe/prices/regressors.py`). Each neighbour's series is saved to a per-country sensor (e.g. `Residual load (DE_LU)`) under that neighbour's own transmission-zone asset.
+The neighbour set comes straight from ENTSO-E's own maintained mapping (`entsoe.mappings.NEIGHBOURS`), so it covers every country and tracks interconnection changes as the `entsoe-py` library is updated. For NL this yields `BE`, `DE_LU`, `DE_AT_LU`, `GB`, `NO_2` and `DK_1`.
 
-- Neighbour data is fetched **leniently**: if a neighbour publishes no data for a series (e.g. `NO_2` / `DK_1` have little or no wind & solar forecast), that series is skipped with a warning instead of aborting the import, and residual load simply falls back to the plain load forecast there.
-- The flag is defined per price country. Countries without a neighbour set (any country other than NL, for now) make `--include-neighbours` a harmless no-op — see the `TODO` in `regressors.py` to extend the mapping.
+Each neighbour's series are saved to **plainly-named** sensors (`Residual load`, `Day-ahead load forecast`, ...) that live on **that neighbour's own transmission-zone asset** and carry **that country's own timezone** (e.g. `Europe/London` for GB, `Europe/Oslo` for NO_2). So a country's identity comes from the asset, not from a name suffix: NL's `Residual load` and DE_LU's `Residual load` are distinct sensors on distinct assets.
+
+- Neighbour data is fetched **leniently**: if a neighbour publishes no data for a series (e.g. `NO_2` / `DK_1` have little or no wind & solar forecast, or a deprecated zone like `DE_AT_LU` has no day-ahead data), that series is skipped with a warning instead of aborting the import — and residual load simply falls back to the plain load forecast there. No empty sensors are created for series with no data.
+- Countries that ENTSO-E lists no neighbours for make `--include-neighbours` a harmless no-op.
 
 
 ### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
