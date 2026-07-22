@@ -97,6 +97,13 @@ from ..utils import (
     help="Also import day-ahead-known generation outages (unavailable capacity) into a `Generation outages` sensor (MW).",
 )
 @click.option(
+    "--include-neighbours/--no-include-neighbours",
+    default=False,
+    help="Also import the selected regressors (except outages) for interconnected neighbouring countries "
+    "(for NL: DE_LU, BE, GB, NO_2, DK_1), into per-country sensors (e.g. `Residual load (DE_LU)`). "
+    "Neighbour scarcity drives NL price spikes, so this improves spike/evening-peak forecasts.",
+)
+@click.option(
     "--load-forecast-sensor",
     "load_forecast_sensor",
     type=SensorIdField(),
@@ -131,6 +138,7 @@ def import_day_ahead_prices(
     include_wind_solar_forecast: bool = False,
     include_residual_load: bool = False,
     include_outages: bool = False,
+    include_neighbours: bool = False,
     load_forecast_sensor: Optional[Sensor] = None,
     residual_load_sensor: Optional[Sensor] = None,
     outages_sensor: Optional[Sensor] = None,
@@ -155,6 +163,10 @@ def import_day_ahead_prices(
       --include-outages              Day-ahead-known generation outages (unavailable MW).
                                      Only outages published before a target hour's delivery
                                      day are counted, to avoid a look-ahead leak.
+      --include-neighbours           Also import the selected regressors (except outages)
+                                     for interconnected neighbours, into per-country sensors
+                                     (e.g. `Residual load (DE_LU)`). Regional NW-European
+                                     scarcity drives NL price spikes.
     """
     # Set up FlexMeasures data structure
     country_code, country_timezone = ensure_country_code_and_timezone(
@@ -220,6 +232,7 @@ def import_day_ahead_prices(
             include_wind_solar_forecast=include_wind_solar_forecast,
             include_residual_load=include_residual_load,
             include_outages=include_outages,
+            include_neighbours=include_neighbours,
             load_forecast_sensor=load_forecast_sensor,
             residual_load_sensor=residual_load_sensor,
             outages_sensor=outages_sensor,
@@ -240,6 +253,7 @@ def collect_and_save_regressors(
     include_wind_solar_forecast: bool,
     include_residual_load: bool,
     include_outages: bool,
+    include_neighbours: bool = False,
     load_forecast_sensor: Optional[Sensor] = None,
     residual_load_sensor: Optional[Sensor] = None,
     outages_sensor: Optional[Sensor] = None,
@@ -249,63 +263,184 @@ def collect_and_save_regressors(
 
     Data is only fetched from ENTSO-E when needed: residual load implies fetching the
     load and wind & solar forecasts, even when those are not saved themselves.
+
+    When ``include_neighbours`` is set, the same regressors (except domestic outages) are
+    also collected for the price country's interconnected neighbours, saved to per-country
+    sensors (e.g. ``Residual load (DE_LU)``) under each neighbour's own transmission zone.
+    Missing neighbour data is skipped gracefully rather than aborting the import.
     """
-    # Ensure/lookup the sensors we will write to.
+    # Collect the domestic (price-country) regressors. This is strict: if ENTSO-E has no
+    # data for the price country itself, we abort (as the price import already does).
+    to_save = _collect_country_regressors(
+        client=client,
+        log=log,
+        data_country_code=country_code,
+        sensor_timezone=country_timezone,
+        from_time=from_time,
+        until_time=until_time,
+        include_load_forecast=include_load_forecast,
+        include_wind_solar_forecast=include_wind_solar_forecast,
+        include_residual_load=include_residual_load,
+        include_outages=include_outages,
+        suffix="",
+        strict=True,
+        load_forecast_sensor=load_forecast_sensor,
+        residual_load_sensor=residual_load_sensor,
+        outages_sensor=outages_sensor,
+    )
+
+    # Optionally, collect the same regressors (minus outages) for each neighbour. This is
+    # lenient: neighbours with no published data (e.g. no wind & solar for NO_2 / DK_1)
+    # are skipped, and residual load then falls back to the plain load forecast.
+    if include_neighbours:
+        neighbours = regressors.INTERCONNECTED_NEIGHBOURS.get(country_code, [])
+        if not neighbours:
+            log.warning(
+                f"No interconnected neighbours are defined for {country_code}; "
+                "--include-neighbours has no effect."
+            )
+        for neighbour in neighbours:
+            log.info(f"Collecting regressors for neighbour {neighbour} ...")
+            to_save += _collect_country_regressors(
+                client=client,
+                log=log,
+                data_country_code=neighbour,
+                sensor_timezone=country_timezone,
+                from_time=from_time,
+                until_time=until_time,
+                include_load_forecast=include_load_forecast,
+                include_wind_solar_forecast=include_wind_solar_forecast,
+                include_residual_load=include_residual_load,
+                include_outages=False,  # outages stay domestic-only
+                suffix=f" ({neighbour})",
+                strict=False,
+            )
+
+    if not dryrun:
+        _save_regressor_series(to_save, log, entsoe_data_source, country_timezone, now)
+
+
+def _collect_country_regressors(
+    client,
+    log,
+    data_country_code: str,
+    sensor_timezone: str,
+    from_time: pd.Timestamp,
+    until_time: pd.Timestamp,
+    include_load_forecast: bool,
+    include_wind_solar_forecast: bool,
+    include_residual_load: bool,
+    include_outages: bool,
+    suffix: str = "",
+    strict: bool = True,
+    load_forecast_sensor: Optional[Sensor] = None,
+    residual_load_sensor: Optional[Sensor] = None,
+    outages_sensor: Optional[Sensor] = None,
+) -> List[Tuple[Sensor, pd.Series, bool]]:
+    """Collect the (sensor, series, is_entsoe_data) triples for one country's regressors.
+
+    ``data_country_code`` is queried at ENTSO-E; the sensors are named with ``suffix``
+    (empty for the price country, e.g. " (DE_LU)" for a neighbour) and live under that
+    country's own transmission zone. With ``strict=False`` (used for neighbours), missing
+    data is skipped with a warning instead of aborting the whole import.
+    """
     ensured_sensors = _ensure_regressor_sensors(
-        country_code=country_code,
-        country_timezone=country_timezone,
+        country_code=data_country_code,
+        country_timezone=sensor_timezone,
         include_load_forecast=include_load_forecast and load_forecast_sensor is None,
         include_wind_solar_forecast=include_wind_solar_forecast,
         include_residual_load=include_residual_load and residual_load_sensor is None,
         include_outages=include_outages and outages_sensor is None,
+        suffix=suffix,
     )
 
     # Query ENTSO-E only for what we need (residual load implies both forecasts).
-    load_series = green_forecast = None
+    load_series = None
+    green_forecast = None
     if include_load_forecast or include_residual_load:
-        log.info("Getting day-ahead load forecast ...")
-        load_forecast = client.query_load_forecast(
-            country_code, start=from_time, end=until_time
+        load_forecast = _query_series(
+            lambda: client.query_load_forecast(
+                data_country_code, start=from_time, end=until_time
+            ),
+            strict=strict,
+            log=log,
+            description=f"day-ahead load forecast for {data_country_code}",
         )
-        abort_if_data_empty(load_forecast)
-        load_series = regressors.load_series_from_forecast(load_forecast)
-        log.debug("Load forecast: \n%s" % load_series)
+        if load_forecast is not None:
+            load_series = regressors.load_series_from_forecast(load_forecast)
+            log.debug("Load forecast: \n%s" % load_series)
     if include_wind_solar_forecast or include_residual_load:
-        log.info("Getting day-ahead wind & solar forecast ...")
-        green_forecast = client.query_wind_and_solar_forecast(
-            country_code, start=from_time, end=until_time, psr_type=None
+        green_forecast = _query_series(
+            lambda: client.query_wind_and_solar_forecast(
+                data_country_code, start=from_time, end=until_time, psr_type=None
+            ),
+            strict=strict,
+            log=log,
+            description=f"day-ahead wind & solar forecast for {data_country_code}",
         )
-        abort_if_data_empty(green_forecast)
-        log.debug("Wind & solar forecast: \n%s" % green_forecast)
+        if green_forecast is not None:
+            log.debug("Wind & solar forecast: \n%s" % green_forecast)
 
     # Assemble the (sensor, series, is_entsoe_data) triples to save.
     to_save: List[Tuple[Sensor, pd.Series, bool]] = []
-    if include_load_forecast:
-        sensor = load_forecast_sensor or ensured_sensors["Day-ahead load forecast"]
+    if include_load_forecast and load_series is not None:
+        sensor = (
+            load_forecast_sensor or ensured_sensors["Day-ahead load forecast" + suffix]
+        )
         to_save.append((sensor, load_series, True))
-    if include_wind_solar_forecast:
+    if include_wind_solar_forecast and green_forecast is not None:
         to_save.extend(
-            _wind_solar_to_save(green_forecast, ensured_sensors, country_code, log)
+            _wind_solar_to_save(
+                green_forecast, ensured_sensors, data_country_code, suffix, log
+            )
         )
     if include_residual_load:
-        residual_load = _build_residual_load(load_series, green_forecast, log)
-        sensor = residual_load_sensor or ensured_sensors["Residual load"]
-        to_save.append((sensor, residual_load, False))
+        if load_series is None:
+            log.warning(
+                f"No load forecast for {data_country_code}; cannot derive residual load. Skipping."
+            )
+        else:
+            residual_load = _build_residual_load(load_series, green_forecast, log)
+            sensor = residual_load_sensor or ensured_sensors["Residual load" + suffix]
+            to_save.append((sensor, residual_load, False))
     if include_outages:
         log.info("Getting generation outages (unavailable capacity) ...")
         outages = client.query_unavailability_of_generation_units(
-            country_code, start=from_time, end=until_time
+            data_country_code, start=from_time, end=until_time
         )
         # Note: outages may legitimately be empty (no announced outages), so we do not abort.
         unavailable_mw = regressors.aggregate_outages_to_hourly_unavailable_mw(
             outages, from_time, until_time
         )
         log.debug("Hourly unavailable capacity (MW): \n%s" % unavailable_mw)
-        sensor = outages_sensor or ensured_sensors["Generation outages"]
+        sensor = outages_sensor or ensured_sensors["Generation outages" + suffix]
         to_save.append((sensor, unavailable_mw, True))
+    return to_save
 
-    if not dryrun:
-        _save_regressor_series(to_save, log, entsoe_data_source, country_timezone, now)
+
+def _query_series(client_call, strict: bool, log, description: str):
+    """Run an ENTSO-E query, returning None on missing data when not strict.
+
+    In strict mode (price country) an empty result aborts, matching the price import.
+    In lenient mode (neighbours) both a raised exception (e.g. entsoe's NoMatchingDataError)
+    and an empty result are turned into a warning + None, so one missing neighbour series
+    never crashes the import.
+    """
+    try:
+        data = client_call()
+    except (
+        Exception
+    ) as e:  # noqa: B902 - any ENTSO-E failure for a neighbour is non-fatal
+        if strict:
+            raise
+        log.warning(f"Could not get {description} ({e}); skipping.")
+        return None
+    if data is None or (hasattr(data, "empty") and data.empty):
+        if strict:
+            abort_if_data_empty(data)  # raises click.Abort
+        log.warning(f"No {description} available; skipping.")
+        return None
+    return data
 
 
 def _ensure_regressor_sensors(
@@ -315,26 +450,40 @@ def _ensure_regressor_sensors(
     include_wind_solar_forecast: bool,
     include_residual_load: bool,
     include_outages: bool,
+    suffix: str = "",
 ) -> Dict[str, Sensor]:
-    """Ensure the sensors for the requested regressors exist, returning them by name."""
+    """Ensure the sensors for the requested regressors exist, returning them by name.
+
+    ``suffix`` is appended to each sensor name (e.g. " (DE_LU)") so neighbour regressors
+    get their own per-country sensors.
+    """
     specs: List[Tuple] = []
     if include_load_forecast:
-        specs.append(regressors.LOAD_FORECAST_SENSOR_SPEC)
+        specs.append(_suffix_spec(regressors.LOAD_FORECAST_SENSOR_SPEC, suffix))
     if include_wind_solar_forecast:
-        specs.extend(regressors.WIND_SOLAR_SENSOR_SPECS)
+        specs.extend(
+            _suffix_spec(spec, suffix) for spec in regressors.WIND_SOLAR_SENSOR_SPECS
+        )
     if include_residual_load:
-        specs.append(regressors.RESIDUAL_LOAD_SENSOR_SPEC)
+        specs.append(_suffix_spec(regressors.RESIDUAL_LOAD_SENSOR_SPEC, suffix))
     if include_outages:
-        specs.append(regressors.OUTAGES_SENSOR_SPEC)
+        specs.append(_suffix_spec(regressors.OUTAGES_SENSOR_SPEC, suffix))
     if not specs:
         return {}
     return ensure_sensors(tuple(specs), country_code, country_timezone)
+
+
+def _suffix_spec(spec: Tuple, suffix: str) -> Tuple:
+    """Append ``suffix`` to a sensor spec's name, leaving unit/resolution/source as-is."""
+    name, unit, event_resolution, data_by_entsoe = spec
+    return (name + suffix, unit, event_resolution, data_by_entsoe)
 
 
 def _wind_solar_to_save(
     green_forecast: pd.DataFrame,
     ensured_sensors: Dict[str, Sensor],
     country_code: str,
+    suffix: str,
     log,
 ) -> List[Tuple[Sensor, pd.Series, bool]]:
     """Pair each reported green column with its sensor (skipping columns not reported)."""
@@ -346,14 +495,18 @@ def _wind_solar_to_save(
                 f"ENTSO-E did not report '{column}' for {country_code}; skipping that sensor."
             )
             continue
-        triples.append((ensured_sensors[column], series, True))
+        triples.append((ensured_sensors[column + suffix], series, True))
     return triples
 
 
 def _build_residual_load(
-    load_series: pd.Series, green_forecast: pd.DataFrame, log
+    load_series: pd.Series, green_forecast: Optional[pd.DataFrame], log
 ) -> pd.Series:
-    """Derive residual load, aligning all inputs to hourly means first."""
+    """Derive residual load, aligning all inputs to hourly means first.
+
+    ``green_forecast`` may be None (no wind & solar published for this country), in which
+    case residual load falls back to the plain load forecast.
+    """
     log.info("Computing residual load (load − wind & solar) ...")
 
     def to_hourly(series: Optional[pd.Series]) -> pd.Series:

@@ -73,6 +73,51 @@ def test_compute_residual_load_treats_missing_green_as_zero():
     assert residual.iloc[1] == pytest.approx(7300.0)
 
 
+def test_compute_residual_load_without_any_green_equals_load():
+    """When no wind & solar is published (all green missing), residual load == load."""
+    index = pd.date_range("2025-06-01", periods=3, freq="1h", tz=TZ)
+    load = pd.Series([9000.0, 9500.0, 10000.0], index=index)
+    empty = pd.Series(dtype="float64")
+
+    residual = regressors.compute_residual_load(load, empty, empty, empty)
+
+    pd.testing.assert_series_equal(
+        residual, load.rename("Residual load"), check_freq=False
+    )
+
+
+# ---------------------------------------------------------------------------
+# Neighbour mapping and green-column tolerance
+# ---------------------------------------------------------------------------
+
+
+def test_interconnected_neighbours_for_nl():
+    assert regressors.INTERCONNECTED_NEIGHBOURS["NL"] == [
+        "DE_LU",
+        "BE",
+        "GB",
+        "NO_2",
+        "DK_1",
+    ]
+
+
+def test_interconnected_neighbours_unknown_country_defaults_to_empty():
+    # The command uses .get(country, []) so unlisted countries are a no-op, not an error.
+    assert regressors.INTERCONNECTED_NEIGHBOURS.get("XX", []) == []
+
+
+def test_green_column_returns_none_when_forecast_is_none():
+    # Happens for neighbours (e.g. NO_2 / DK_1) that publish no wind & solar forecast.
+    for column in regressors.GREEN_COLUMNS:
+        assert regressors.green_column(None, column) is None
+
+
+def test_green_column_returns_none_when_column_absent():
+    df = pd.DataFrame({"Solar": [1.0, 2.0]})
+    assert regressors.green_column(df, "Wind Offshore") is None
+    assert regressors.green_column(df, "Solar") is not None
+
+
 # ---------------------------------------------------------------------------
 # Outage aggregation with knowledge horizon
 # ---------------------------------------------------------------------------

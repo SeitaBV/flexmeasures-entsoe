@@ -46,6 +46,23 @@ OUTAGES_SENSOR_SPEC = ("Generation outages", "MW", timedelta(hours=1), True)
 GREEN_COLUMNS = ("Solar", "Wind Offshore", "Wind Onshore")
 
 
+# Interconnected neighbours per price country, defined by (day-ahead) interconnector.
+#
+# A €500+/MWh NL scarcity spike is usually a *regional* NW-European event: when Germany,
+# Belgium, Great Britain and the Nordics are tight at the same time, imports into NL dry
+# up. The neighbours' own day-ahead residual-load forecasts therefore measurably improve
+# NL spike and evening-peak price forecasts. When --include-neighbours is set, each
+# selected regressor (except domestic outages) is also fetched and saved for these
+# neighbours, into per-country sensors (e.g. "Residual load (DE_LU)").
+#
+# Countries not listed here (or mapped to an empty list) simply make --include-neighbours
+# a no-op rather than an error.
+# TODO: populate the neighbour sets for price countries other than NL.
+INTERCONNECTED_NEIGHBOURS = {
+    "NL": ["DE_LU", "BE", "GB", "NO_2", "DK_1"],
+}
+
+
 def compute_residual_load(
     load_forecast: pd.Series,
     solar: pd.Series,
@@ -56,26 +73,21 @@ def compute_residual_load(
 
     residual load = load forecast − solar − wind offshore − wind onshore
 
-    All inputs should be (hourly) MW series; they are aligned on their datetime index
-    before subtracting, so missing green components simply do not lower the residual.
+    All inputs should be (hourly) MW series. Each green series is aligned onto the load
+    forecast's index (missing timestamps treated as zero), so residual load keeps the load
+    forecast's (datetime) index even when a green component is missing entirely — which is
+    exactly the NO_2 / DK_1 case, where residual then falls back to the plain load forecast.
     Residual load is the strongest single regressor for NL day-ahead prices: the price is
     set against these very forecasts, so residual load tracks the scarcity that drives it
     (and flattens the spurious holiday-morning peak while capturing the midday collapse).
     """
-    frame = pd.concat(
-        {
-            "load": load_forecast,
-            "solar": solar,
-            "wind_offshore": wind_offshore,
-            "wind_onshore": wind_onshore,
-        },
-        axis="columns",
-    )
+    index = load_forecast.index
+
+    def aligned(green: pd.Series) -> pd.Series:
+        return green.reindex(index).fillna(0.0)
+
     residual = (
-        frame["load"]
-        - frame["solar"].fillna(0.0)
-        - frame["wind_offshore"].fillna(0.0)
-        - frame["wind_onshore"].fillna(0.0)
+        load_forecast - aligned(solar) - aligned(wind_offshore) - aligned(wind_onshore)
     )
     return residual.rename("Residual load")
 
@@ -158,8 +170,15 @@ def load_series_from_forecast(load_forecast: pd.DataFrame) -> pd.Series:
     return load_forecast.iloc[:, 0]
 
 
-def green_column(green_forecast: pd.DataFrame, column: str) -> Optional[pd.Series]:
-    """Return a green-forecast column if ENTSO-E reported it for this country, else None."""
-    if column in green_forecast.columns:
-        return green_forecast[column]
-    return None
+def green_column(
+    green_forecast: Optional[pd.DataFrame], column: str
+) -> Optional[pd.Series]:
+    """Return a green-forecast column if ENTSO-E reported it for this country, else None.
+
+    ``green_forecast`` may be None when no wind & solar forecast is published at all (e.g.
+    for NO_2 / DK_1); in that case every column is simply treated as missing, so residual
+    load falls back to the plain load forecast instead of crashing.
+    """
+    if green_forecast is None or column not in green_forecast.columns:
+        return None
+    return green_forecast[column]

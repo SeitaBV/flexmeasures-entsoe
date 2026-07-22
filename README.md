@@ -28,6 +28,7 @@ Research on the Dutch (NL) day-ahead market established that ENTSO-E day-ahead *
 
 - **Residual load** (= day-ahead load forecast − day-ahead wind & solar forecast) is the single best regressor. Because the day-ahead *price* is formed against these very forecasts, residual load flattens the spurious holiday-morning price peak and captures the midday collapse.
 - **Generation outages** (day-ahead-known unavailable capacity) are a weaker, but physically relevant, regressor for scarcity.
+- **Neighbouring countries' regressors** matter too: a €500+/MWh NL scarcity spike is usually a *regional* NW-European event (Germany, Belgium, Great Britain and the Nordics tight at the same time, so imports dry up). Neighbours' day-ahead residual-load forecasts measurably improve NL spike and evening-peak forecasts.
 
 While importing day-ahead prices, you can *also* pull these regressor series, each into its own sensor (in MW). Choose what to import with the `--include-*` flags (all default to off):
 
@@ -47,12 +48,26 @@ The flags are independent, so you can import just what you need, e.g. only resid
 | `--include-wind-solar-forecast` | `Solar`, `Wind Onshore`, `Wind Offshore` (shared with the generation import) | MW | ENTSO-E |
 | `--include-residual-load` | `Residual load` | MW | derived (`ENTSOE_DERIVED_DATA_SOURCE`) |
 | `--include-outages` | `Generation outages` | MW | ENTSO-E |
+| `--include-neighbours` | The selected regressors above (except outages), per neighbour, e.g. `Residual load (DE_LU)` | MW | ENTSO-E / derived |
 
 Notes:
 
 - `--include-residual-load` implies fetching both the load forecast and the wind & solar forecast (it needs them to derive residual load), but it only *saves* those series if their own flag is also set.
 - Each single-sensor regressor can be pointed at a specific existing sensor with `--load-forecast-sensor`, `--residual-load-sensor` and `--outages-sensor` (by sensor ID). Otherwise a sensibly-named sensor is created/looked up automatically.
 - **Generation outages and the day-ahead knowledge horizon.** For each target hour we sum the unavailable capacity (`nominal_power − avail_qty`) of every outage overlapping that hour, but *only* if the outage was **published (`created_doc_time`) before that hour's delivery day** (local midnight). Day-ahead prices are set with only the information known before the delivery day, so counting an outage announced on or after the delivery day would leak look-ahead information into the regressor. The publication time is checked per target hour, so a multi-day range aggregates correctly without leaking.
+
+#### Importing neighbours' regressors
+
+Add `--include-neighbours` to *also* pull the selected regressors (all except outages, which stay domestic-only) for the price country's interconnected neighbours:
+
+    flexmeasures entsoe import-day-ahead-prices \
+        --include-residual-load \
+        --include-neighbours
+
+For NL, the neighbours are `DE_LU`, `BE`, `GB`, `NO_2` and `DK_1` (defined by interconnector in `INTERCONNECTED_NEIGHBOURS` in `flexmeasures_entsoe/prices/regressors.py`). Each neighbour's series is saved to a per-country sensor (e.g. `Residual load (DE_LU)`) under that neighbour's own transmission-zone asset.
+
+- Neighbour data is fetched **leniently**: if a neighbour publishes no data for a series (e.g. `NO_2` / `DK_1` have little or no wind & solar forecast), that series is skipped with a warning instead of aborting the import, and residual load simply falls back to the plain load forecast there.
+- The flag is defined per price country. Countries without a neighbour set (any country other than NL, for now) make `--include-neighbours` a harmless no-op — see the `TODO` in `regressors.py` to extend the mapping.
 
 
 ### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
