@@ -1,9 +1,10 @@
 from typing import Dict, Optional, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import Logger
 
 from entsoe import EntsoePandasClient
 from flask import current_app
+from packaging import version
 from pandas.tseries.frequencies import to_offset
 import pandas as pd
 import click
@@ -11,31 +12,117 @@ import pytz
 import entsoe
 
 from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures import Asset, AssetType, Sensor, Source
+from flexmeasures import (
+    Asset,
+    AssetType,
+    Sensor,
+    Source,
+    __version__ as flexmeasures_version,
+)
 from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
-
+from flexmeasures.cli.utils import MsgStyle
 from . import (
+    DEFAULT_DATA_SOURCE_NAME,
     DEFAULT_DERIVED_DATA_SOURCE,
     DEFAULT_COUNTRY_CODE,
     DEFAULT_COUNTRY_TIMEZONE,
 )  # noqa: E402
 
+FM_SUPPORTS_ACCOUNT_LINKED_SOURCES = version.parse(
+    flexmeasures_version
+) >= version.parse("0.32")
+
+if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
+    from flexmeasures import Account
+    from flexmeasures.data.services.data_sources import get_or_create_source
+
+
+def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
+    return (
+        Source.query.filter(
+            Source.name == source_name,
+            Source.type == source_type,
+        )
+        .order_by(Source.id)
+        .first()
+    )
+
+
+def get_or_create_entsoe_account():
+    """Make sure we have an account for the ENTSO-E provider service."""
+    account_name = current_app.config.get(
+        "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
+    )
+    entsoe_account = Account.query.filter(
+        Account.name == account_name,
+    ).one_or_none()
+    if entsoe_account is None:
+        entsoe_account = Account(name=account_name)
+        db.session.add(entsoe_account)
+        db.session.flush()
+    return entsoe_account
+
+
+def _ensure_entsoe_source(
+    source_name: str,
+    source_type: str,
+    legacy_source_type: Optional[str] = None,
+) -> Source:
+    """Reuse legacy sources when possible while branching explicitly on FM version."""
+    entsoe_account = None
+    if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
+        entsoe_account = get_or_create_entsoe_account()
+
+    existing_source = _find_existing_source(source_name, source_type)
+    if existing_source is None and legacy_source_type is not None:
+        existing_source = _find_existing_source(source_name, legacy_source_type)
+        if existing_source is not None:
+            existing_source.type = source_type
+
+    if existing_source is not None:
+        if (
+            entsoe_account is not None
+            and getattr(existing_source, "account", None) is None
+        ):
+            existing_source.account = entsoe_account
+        return existing_source
+
+    if not FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
+        return get_data_source(
+            data_source_name=source_name,
+            data_source_type=source_type,
+        )
+
+    source_kwargs = dict(
+        source=source_name,
+        source_type=source_type,
+        flush=False,
+    )
+    if entsoe_account is not None:
+        source_kwargs["account"] = entsoe_account
+    return get_or_create_source(**source_kwargs)
+
 
 def ensure_data_source() -> Source:
-    return get_data_source(
-        data_source_name="ENTSO-E",
-        data_source_type="forecasting script",
+    """Make sure we have a raw ENTSO-E data source of type "market"."""
+    return _ensure_entsoe_source(
+        source_name=current_app.config.get(
+            "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
+        ),
+        source_type="market",
+        legacy_source_type="forecasting script",
     )
 
 
 def ensure_data_source_for_derived_data() -> Source:
-    return get_data_source(
-        data_source_name=current_app.config.get(
+    """Make sure we have a data source for data derived from ENTSO-E data."""
+    return _ensure_entsoe_source(
+        source_name=current_app.config.get(
             "ENTSOE_DERIVED_DATA_SOURCE", DEFAULT_DERIVED_DATA_SOURCE
         ),
-        data_source_type="forecasting script",
+        source_type="forecasting script",
     )
 
 
@@ -68,7 +155,7 @@ def ensure_transmission_zone_asset(country_code: str) -> Asset:
 
 
 def ensure_sensors(
-    sensor_specifications: Tuple[Tuple, ...],
+    sensor_specifications: Tuple,
     country_code: str,
     timezone: str,
 ) -> Dict[str, Sensor]:
@@ -157,54 +244,63 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
-def parse_from_and_to_dates_default_today_and_tomorrow(
-    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
-) -> Tuple[datetime, datetime]:
-    """
-    Parse CLI options (or set default to today and tomorrow)
-    Note:  entsoe-py expects time params as pd.Timestamp
-    """
-    today_start = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    if to_date is None:
-        to_date = pd.Timestamp(
-            today_start, tzinfo=pytz.timezone(country_timezone)
-        ) + pd.offsets.DateOffset(
-            days=1
-        )  # Add a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
-    else:
-        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
-    if from_date is None:
-        from_date = pd.Timestamp(today_start, tzinfo=pytz.timezone(country_timezone))
-    else:
-        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
-    from_time, until_time = date_range_to_time_range(from_date, to_date)
-    return from_time, until_time
-
-
-def parse_from_and_to_dates_default_yesterday(
-    from_date: Optional[datetime], to_date: Optional[datetime], country_timezone: str
-) -> Tuple[datetime, datetime]:
-    """
-    Parse CLI options (or set default to yesterday)
-    Note:  entsoe-py expects time params as pd.Timestamp
-    """
-    if from_date is None:
-        today_start = datetime.today().replace(
-            hour=0, minute=0, second=0, microsecond=0
+def abort_if_data_incomplete(
+    data: Union[pd.DataFrame, pd.Series],
+    from_time: pd.Timestamp,
+    until_time: pd.Timestamp,
+    resolution: pd.Timedelta,
+):
+    expected_periods = int((until_time - from_time) / resolution)
+    if len(data) < expected_periods:
+        click.secho(
+            f"Result is incomplete. Expected {expected_periods} periods but got {len(data)}. Probably ENTSO-E does not provide these forecasts yet ...",
+            **MsgStyle.ERROR,
         )
-        from_date = pd.Timestamp(
-            today_start, tzinfo=pytz.timezone(country_timezone)
-        ) - pd.offsets.DateOffset(
-            days=1
-        )  # Deduct a calendar day instead of just 24 hours, from https://github.com/gweis/isodate/pull/64
+        raise click.Abort
+
+
+def parse_from_and_to_dates(
+    from_date: Optional[datetime],
+    until_date: Optional[datetime],
+    country_timezone: str,
+    default_to: str = "today-and-tomorrow",  # Can be "tomorrow" or "today"
+) -> Tuple[pd.Timestamp, pd.Timestamp]:
+    """
+    Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
+    Note: we expect only dates as input here, and until_date is inclusive, so we extend it with 24h - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
+    Note:  entsoe-py expects time params as pd.Timestamp
+    """
+    tz = pytz.timezone(country_timezone)
+    now = datetime.now(tz)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if default_to == "today":
+        default_start = today_start
+        default_end = today_start + timedelta(days=1)
+    elif default_to == "tomorrow":
+        default_start = today_start + timedelta(days=1)
+        default_end = default_start + timedelta(days=1)
+    elif default_to == "today-and-tomorrow":
+        default_start = today_start
+        default_end = default_start + timedelta(days=2)
     else:
-        from_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
-    if to_date is None:
-        to_date = from_date
+        raise ValueError(
+            f"Invalid default_to value: {default_to}. Expected 'today', 'tomorrow' or 'today-and-tomorrow'."
+        )
+
+    if from_date is None:
+        start_date = pd.Timestamp(default_start)
     else:
-        to_date = pd.Timestamp(to_date, tzinfo=pytz.timezone(country_timezone))
-    from_time, until_time = date_range_to_time_range(from_date, to_date)
-    return from_time, until_time
+        start_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
+
+    if until_date is None:
+        end_date = pd.Timestamp(default_end)
+    else:
+        end_date = pd.Timestamp(until_date, tzinfo=pytz.timezone(country_timezone))
+        # The until_date provided is considered inclusive, so we add 24 hours to include the entire day
+        end_date += pd.Timedelta(hours=24)
+
+    return start_date, end_date
 
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
@@ -265,13 +361,6 @@ def save_entsoe_series(
         current_app.logger.info("Done. These beliefs had already been saved before.")
     elif status == "success_with_unchanged_beliefs_skipped":
         current_app.logger.info("Done. Some beliefs had already been saved before.")
-
-
-def date_range_to_time_range(
-    from_date: pd.Timestamp, to_date: pd.Timestamp
-) -> Tuple[pd.Timestamp, pd.Timestamp]:
-    """Because to_date is inclusive, we add one calendar day."""
-    return from_date, to_date + pd.offsets.DateOffset(days=1)
 
 
 def start_import_log(

@@ -19,7 +19,7 @@ from ..utils import (
     ensure_data_source,
     ensure_data_source_for_derived_data,
     abort_if_data_empty,
-    parse_from_and_to_dates_default_today_and_tomorrow,
+    parse_from_and_to_dates,
     save_entsoe_series,
     ensure_sensors,
     resample_if_needed,
@@ -79,6 +79,14 @@ kg_CO2_per_MWh = dict(
     required=False,
     help="Timezone for the country (such as 'Europe/Amsterdam').",
 )
+@click.option(
+    "--for",
+    "default_import_timerange",
+    required=False,
+    default="today-and-tomorrow",
+    type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
+    help="Easy-to-use time range setting, only used if --from-date and --to-date are not used. If set to 'today' or 'tomorrow' or 'today-and-tomorrow', only import data for thes days. The default is today-and-tomorrow.",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-generation")
 def import_day_ahead_generation(
@@ -87,6 +95,7 @@ def import_day_ahead_generation(
     to_date: Optional[datetime] = None,
     country_code: Optional[str] = None,
     country_timezone: Optional[str] = None,
+    default_import_timerange: str = "today-and-tomorrow",
 ):
     """
     Import forecasted generation for any date range, defaulting to today and tomorrow.
@@ -102,8 +111,8 @@ def import_day_ahead_generation(
     derived_data_source = ensure_data_source_for_derived_data()
     sensors = ensure_sensors(generation_sensors, country_code, country_timezone)
     # Parse CLI options (or set defaults)
-    from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
-        from_date, to_date, country_timezone
+    from_time, until_time = parse_from_and_to_dates(
+        from_date, to_date, country_timezone, default_to=default_import_timerange
     )
 
     # Start import

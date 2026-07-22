@@ -22,10 +22,11 @@ from ..utils import (
     ensure_country_code_and_timezone,
     ensure_data_source,
     ensure_data_source_for_derived_data,
-    parse_from_and_to_dates_default_today_and_tomorrow,
+    parse_from_and_to_dates,
     ensure_sensors,
     save_entsoe_series,
     abort_if_data_empty,
+    abort_if_data_incomplete,
     resample_if_needed,
     start_import_log,
 )
@@ -124,6 +125,21 @@ from ..utils import (
     required=False,
     help="Sensor to store generation outages into. Defaults to the `Generation outages` sensor.",
 )
+@click.option(
+    "--for",
+    "default_import_timerange",
+    required=False,
+    default="today-and-tomorrow",
+    type=click.Choice(["today", "tomorrow", "today-and-tomorrow"]),
+    help="Easy-to-use time range setting, which defines the defaults for start and end to be used when --from-date and/or --to-date are not used. Can be set to 'today' or 'tomorrow' or 'today-and-tomorrow' (which is the default value).",
+)
+@click.option(
+    "--fail-on-incomplete-data",
+    "fail_on_incomplete_data",
+    is_flag=True,
+    default=False,
+    help="If set, the import will abort if the data received is incomplete.",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
 def import_day_ahead_prices(
@@ -142,6 +158,8 @@ def import_day_ahead_prices(
     load_forecast_sensor: Optional[Sensor] = None,
     residual_load_sensor: Optional[Sensor] = None,
     outages_sensor: Optional[Sensor] = None,
+    default_import_timerange: str = "today-and-tomorrow",
+    fail_on_incomplete_data: bool = False,
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -187,8 +205,8 @@ def import_day_ahead_prices(
         pricing_sensor = sensor
 
     # Parse CLI options (or set defaults)
-    from_time, until_time = parse_from_and_to_dates_default_today_and_tomorrow(
-        from_date, to_date, country_timezone
+    from_time, until_time = parse_from_and_to_dates(
+        from_date, to_date, country_timezone, default_to=default_import_timerange
     )
 
     # Start import
@@ -202,6 +220,10 @@ def import_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
     abort_if_data_empty(prices)
+    if fail_on_incomplete_data:
+        abort_if_data_incomplete(
+            prices, from_time, until_time, pricing_sensor.event_resolution
+        )
     prices = resample_if_needed(prices, pricing_sensor)
     log.debug("Prices: \n%s" % prices)
 
