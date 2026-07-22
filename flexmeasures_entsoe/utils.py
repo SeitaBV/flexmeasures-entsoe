@@ -68,7 +68,7 @@ def ensure_transmission_zone_asset(country_code: str) -> Asset:
 
 
 def ensure_sensors(
-    sensor_specifications: Tuple[Tuple],
+    sensor_specifications: Tuple[Tuple, ...],
     country_code: str,
     timezone: str,
 ) -> Dict[str, Sensor]:
@@ -209,7 +209,6 @@ def parse_from_and_to_dates_default_yesterday(
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
     inferred_frequency = pd.infer_freq(s.index)
-    breakpoint()
     if inferred_frequency is None:
         raise ValueError(
             "Data has no discernible frequency from which to derive an event resolution."

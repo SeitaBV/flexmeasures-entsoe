@@ -22,6 +22,39 @@ Importing tomorrow's generation (incl. CO2 estimated content):
 Use ``--help`` to learn more usage details.
 
 
+### Importing extra regressors for price forecasting
+
+Research on the Dutch (NL) day-ahead market established that ENTSO-E day-ahead *fundamentals* dramatically improve day-ahead **price** forecasting, especially for hard cases (public holidays and the solar-driven midday price collapse):
+
+- **Residual load** (= day-ahead load forecast − day-ahead wind & solar forecast) is the single best regressor. Because the day-ahead *price* is formed against these very forecasts, residual load flattens the spurious holiday-morning price peak and captures the midday collapse.
+- **Generation outages** (day-ahead-known unavailable capacity) are a weaker, but physically relevant, regressor for scarcity.
+
+While importing day-ahead prices, you can *also* pull these regressor series, each into its own sensor (in MW). Choose what to import with the `--include-*` flags (all default to off):
+
+    flexmeasures entsoe import-day-ahead-prices \
+        --include-load-forecast \
+        --include-wind-solar-forecast \
+        --include-residual-load \
+        --include-outages
+
+The flags are independent, so you can import just what you need, e.g. only residual load:
+
+    flexmeasures entsoe import-day-ahead-prices --include-residual-load
+
+| Flag | Sensor(s) created/used | Unit | Source |
+| --- | --- | --- | --- |
+| `--include-load-forecast` | `Day-ahead load forecast` | MW | ENTSO-E |
+| `--include-wind-solar-forecast` | `Solar`, `Wind Onshore`, `Wind Offshore` (shared with the generation import) | MW | ENTSO-E |
+| `--include-residual-load` | `Residual load` | MW | derived (`ENTSOE_DERIVED_DATA_SOURCE`) |
+| `--include-outages` | `Generation outages` | MW | ENTSO-E |
+
+Notes:
+
+- `--include-residual-load` implies fetching both the load forecast and the wind & solar forecast (it needs them to derive residual load), but it only *saves* those series if their own flag is also set.
+- Each single-sensor regressor can be pointed at a specific existing sensor with `--load-forecast-sensor`, `--residual-load-sensor` and `--outages-sensor` (by sensor ID). Otherwise a sensibly-named sensor is created/looked up automatically.
+- **Generation outages and the day-ahead knowledge horizon.** For each target hour we sum the unavailable capacity (`nominal_power − avail_qty`) of every outage overlapping that hour, but *only* if the outage was **published (`created_doc_time`) before that hour's delivery day** (local midnight). Day-ahead prices are set with only the information known before the delivery day, so counting an outage announced on or after the delivery day would leak look-ahead information into the regressor. The publication time is checked per target hour, so a multi-day range aggregates correctly without leaking.
+
+
 ### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
 
 ENTSO-E is moving from 1-hour day-ahead prices 15-minute day-ahead prices on October 1st 2025.
