@@ -91,7 +91,7 @@ def collect_and_save_regressors(
     neighbours = regressors.neighbours_for(country_code)
     if not neighbours:
         log.warning(
-            f"ENTSO-E lists no interconnected neighbours for {country_code}; "
+            f"ENTSO-E lists no interconnected neighbours for {country_code}, so "
             "--include-neighbours has no effect."
         )
     for neighbour in neighbours:
@@ -152,7 +152,9 @@ def _collect_ensure_and_save(
         outages_sensor=outages_sensor,
     )
     if not dryrun:
-        _save_results(results, country_code, timezone, log, entsoe_data_source, now)
+        _save_results(
+            results, country_code, timezone, log, entsoe_data_source, now, strict=strict
+        )
 
 
 def _collect_country_regressors(
@@ -218,14 +220,14 @@ def _collect_country_regressors(
             series = regressors.green_column(green_forecast, column)
             if series is None:
                 log.warning(
-                    f"ENTSO-E did not report '{column}' for {country_code}; skipping that sensor."
+                    f"ENTSO-E did not report '{column}' for {country_code}, skipping that sensor."
                 )
                 continue
             results.append((_GREEN_SPEC_BY_NAME[column], None, series, True))
     if include_residual_load:
         if load_series is None:
             log.warning(
-                f"No load forecast for {country_code}; cannot derive residual load. Skipping."
+                f"No load forecast for {country_code}, cannot derive residual load. Skipping."
             )
         else:
             residual_load = _build_residual_load(load_series, green_forecast, log)
@@ -260,8 +262,15 @@ def _save_results(
     log,
     entsoe_data_source: Source,
     now,
+    strict: bool = True,
 ):
-    """Ensure the needed sensors (once) and save each regressor series to its sensor."""
+    """Ensure the needed sensors (once) and save each regressor series to its sensor.
+
+    With ``strict=False`` (used for neighbours), a series whose timestamps cannot be
+    aligned to its sensor's resolution is skipped with a warning instead of aborting
+    the remaining series and zones, extending the lenient policy of
+    :func:`_query_series` to the saving step.
+    """
     if not results:
         return
 
@@ -273,7 +282,15 @@ def _save_results(
     derived_data_source = None  # created lazily, only if we save derived data
     for spec, override, series, is_entsoe_data in results:
         sensor = override if override is not None else ensured[spec[0]]
-        series = resample_if_needed(series, sensor)
+        try:
+            series = resample_if_needed(series, sensor)
+        except ValueError as e:
+            if strict:
+                raise
+            log.warning(
+                f"Could not align {sensor.name} data for {country_code} ({e}), skipping."
+            )
+            continue
         if is_entsoe_data:
             source = entsoe_data_source
         else:
@@ -294,15 +311,17 @@ def _query_series(client_call, strict: bool, log, description: str):
     """
     try:
         data = client_call()
-    except Exception as e:  # noqa: B902 - any ENTSO-E failure for a neighbour is non-fatal
+    except (
+        Exception
+    ) as e:  # noqa: B902 - any ENTSO-E failure for a neighbour is non-fatal
         if strict:
             raise
-        log.warning(f"Could not get {description} ({e}); skipping.")
+        log.warning(f"Could not get {description} ({e}), skipping.")
         return None
     if data is None or (hasattr(data, "empty") and data.empty):
         if strict:
             abort_if_data_empty(data)  # raises click.Abort
-        log.warning(f"No {description} available; skipping.")
+        log.warning(f"No {description} available, skipping.")
         return None
     return data
 

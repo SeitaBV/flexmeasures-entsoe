@@ -22,6 +22,7 @@ _REGRESSORS_PATH = os.path.join(
     _HERE, "..", "flexmeasures_entsoe", "prices", "regressors.py"
 )
 _spec = importlib.util.spec_from_file_location("_entsoe_regressors", _REGRESSORS_PATH)
+assert _spec is not None and _spec.loader is not None
 regressors = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(regressors)
 

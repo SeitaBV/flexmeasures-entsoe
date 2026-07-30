@@ -28,8 +28,9 @@ HOURLY = pd.date_range(FROM_TIME, UNTIL_TIME, freq="1h", inclusive="left", tz=TZ
 
 
 class FakeSensor:
-    def __init__(self, name):
+    def __init__(self, name, event_resolution=None):
         self.name = name
+        self.event_resolution = event_resolution
 
     def __repr__(self):
         return f"<FakeSensor {self.name}>"
@@ -246,3 +247,97 @@ def test_collect_and_save_uses_each_country_own_timezone_and_base_names(monkeypa
 
     # Residual load is saved from the derived source, with the country's own timezone.
     assert ("Residual load", "Europe/London", "DERIVED") in save_calls
+
+
+# ---------------------------------------------------------------------------
+# resample_if_needed and _save_results: irregular (gappy) neighbour data
+# ---------------------------------------------------------------------------
+
+
+def test_resample_if_needed_tolerates_gaps():
+    """Hourly data with missing hours (no inferable frequency) must survive as-is.
+
+    Neighbour zones (e.g. DK_1) can return series with holes, for which
+    ``pd.infer_freq`` finds no frequency; the most common timestamp spacing
+    still identifies the resolution.
+    """
+    from datetime import timedelta
+
+    from flexmeasures_entsoe.utils import resample_if_needed
+
+    gappy_index = HOURLY.delete([3, 4, 10])  # knock holes into the hourly grid
+    series = pd.Series(12000.0, index=gappy_index)
+    sensor = FakeSensor("Day-ahead load forecast", event_resolution=timedelta(hours=1))
+
+    result = resample_if_needed(series, sensor)
+
+    assert result.equals(series)
+
+
+def test_resample_if_needed_still_raises_without_any_spacing():
+    """A single timestamp offers no spacing at all, so the clear error remains."""
+    from datetime import timedelta
+
+    from flexmeasures_entsoe.utils import resample_if_needed
+
+    series = pd.Series([12000.0], index=HOURLY[:1])
+    sensor = FakeSensor("Day-ahead load forecast", event_resolution=timedelta(hours=1))
+
+    with pytest.raises(ValueError, match="no discernible frequency"):
+        resample_if_needed(series, sensor)
+
+
+def _run_save_results_with_unalignable_series(monkeypatch, strict):
+    """Prepare _save_results with one unalignable series among good ones."""
+    saved = []
+    log = FakeLog()
+
+    monkeypatch.setattr(
+        regressors_import,
+        "ensure_sensors",
+        lambda specs, country_code, timezone: {s[0]: FakeSensor(s[0]) for s in specs},
+    )
+    monkeypatch.setattr(
+        regressors_import,
+        "save_entsoe_series",
+        lambda series, sensor, source, timezone, now: saved.append(sensor.name),
+    )
+
+    def picky_resample(series, sensor):
+        if sensor.name == "Day-ahead load forecast":
+            raise ValueError("no discernible frequency")
+        return series
+
+    monkeypatch.setattr(regressors_import, "resample_if_needed", picky_resample)
+
+    good = pd.Series(1.0, index=HOURLY)
+    results = [
+        (("Day-ahead load forecast", "MW", None, True), None, good, True),
+        (("Residual load", "MW", None, True), None, good, True),
+    ]
+
+    def run():
+        regressors_import._save_results(
+            results, "DK_1", "Europe/Copenhagen", log, "ENTSOE", None, strict=strict
+        )
+
+    return run, saved, log
+
+
+def test_save_results_lenient_skips_unalignable_series(monkeypatch):
+    """In lenient (neighbour) mode, one bad series is skipped; the rest still save."""
+    run, saved, log = _run_save_results_with_unalignable_series(
+        monkeypatch, strict=False
+    )
+    run()
+    assert saved == ["Residual load"]
+    assert any("skipping" in w for w in log.warnings)
+
+
+def test_save_results_strict_raises_on_unalignable_series(monkeypatch):
+    """In strict (price country) mode, an unalignable series still aborts."""
+    run, _saved, _log = _run_save_results_with_unalignable_series(
+        monkeypatch, strict=True
+    )
+    with pytest.raises(ValueError):
+        run()
