@@ -1,9 +1,9 @@
 from typing import Dict, Optional, Tuple, Union
 from datetime import datetime, timedelta
-from logging import Logger
+from logging import Logger, getLogger
 
 from entsoe import EntsoePandasClient
-from flask import current_app
+from flask import current_app, has_app_context
 from packaging import version
 from pandas.tseries.frequencies import to_offset
 import pandas as pd
@@ -12,7 +12,13 @@ import pytz
 import entsoe
 
 from flexmeasures.data.utils import get_data_source, save_to_db
-from flexmeasures import Asset, AssetType, Sensor, Source, __version__ as flexmeasures_version
+from flexmeasures import (
+    Asset,
+    AssetType,
+    Sensor,
+    Source,
+    __version__ as flexmeasures_version,
+)
 from flexmeasures.data import db
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
@@ -76,7 +82,10 @@ def _ensure_entsoe_source(
             existing_source.type = source_type
 
     if existing_source is not None:
-        if entsoe_account is not None and getattr(existing_source, "account", None) is None:
+        if (
+            entsoe_account is not None
+            and getattr(existing_source, "account", None) is None
+        ):
             existing_source.account = entsoe_account
         return existing_source
 
@@ -295,12 +304,28 @@ def parse_from_and_to_dates(
 
 
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
-    inferred_frequency = pd.infer_freq(s.index)
-    if inferred_frequency is None:
-        raise ValueError(
-            "Data has no discernible frequency from which to derive an event resolution."
+    try:
+        inferred_frequency = pd.infer_freq(s.index)
+    except ValueError:  # pd.infer_freq needs at least 3 timestamps
+        inferred_frequency = None
+    if inferred_frequency is not None:
+        inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
+    else:
+        # Gaps in the data (e.g. hours missing from a neighbour zone's series)
+        # defeat pd.infer_freq. The most common spacing between consecutive
+        # timestamps still identifies the resolution in that case.
+        spacings = s.index.to_series().diff().dropna()
+        if spacings.empty:
+            raise ValueError(
+                "Data has no discernible frequency from which to derive an event resolution."
+            )
+        inferred_resolution = spacings.mode().iloc[0]
+        logger = current_app.logger if has_app_context() else getLogger(__name__)
+        logger.warning(
+            f"Data for {sensor.name} has an irregular index (e.g. gaps), "
+            f"assuming an event resolution of {inferred_resolution} "
+            "(the most common timestamp spacing)."
         )
-    inferred_resolution = pd.to_timedelta(to_offset(inferred_frequency))
     target_resolution = sensor.event_resolution
     if inferred_resolution == target_resolution:
         return s
@@ -315,7 +340,8 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
         s = s.reindex(index).pad()
     elif inferred_resolution < target_resolution:
         current_app.logger.debug(f"Downsampling data for {sensor.name} ...")
-        s = s.resample(target_resolution).mean()
+        # Gaps in the data leave empty (NaN) buckets, which are not saved as beliefs.
+        s = s.resample(target_resolution).mean().dropna()
     current_app.logger.debug(f"Resampled data for {sensor.name}: \n%s" % s)
     return s
 

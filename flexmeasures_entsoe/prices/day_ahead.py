@@ -13,6 +13,7 @@ from flexmeasures.data.schemas.sources import DataSourceIdField
 
 
 from . import pricing_sensors
+from .regressors_import import collect_and_save_regressors
 from .. import (
     entsoe_data_bp,
 )  # noqa: E402
@@ -75,6 +76,63 @@ from ..utils import (
     help="Source of the price data. If not provided, the source `ENTSO-E` is used.",
 )
 @click.option(
+    "--include-all/--no-include-all",
+    default=False,
+    help="Shorthand for 'import everything': turns on every regressor "
+    "(load forecast, wind & solar forecast, residual load, outages) AND --include-neighbours. "
+    "Combines with any explicitly set flags.",
+)
+@click.option(
+    "--include-load-forecast/--no-include-load-forecast",
+    default=False,
+    help="Also import the ENTSO-E day-ahead load forecast into a `Day-ahead load forecast` sensor (MW).",
+)
+@click.option(
+    "--include-wind-solar-forecast/--no-include-wind-solar-forecast",
+    default=False,
+    help="Also import the ENTSO-E day-ahead wind & solar forecast into the `Solar`, `Wind Onshore` and `Wind Offshore` sensors (MW).",
+)
+@click.option(
+    "--include-residual-load/--no-include-residual-load",
+    default=False,
+    help="Also derive and import residual load (load forecast − wind & solar forecast) into a `Residual load` sensor (MW). "
+    "The strongest single regressor for day-ahead prices. Implies fetching the load and wind & solar forecasts.",
+)
+@click.option(
+    "--include-outages/--no-include-outages",
+    default=False,
+    help="Also import day-ahead-known generation outages (unavailable capacity) into a `Generation outages` sensor (MW).",
+)
+@click.option(
+    "--include-neighbours/--no-include-neighbours",
+    default=False,
+    help="Also import the selected regressors (except outages) for interconnected neighbouring countries "
+    "(from ENTSO-E's own neighbour mapping; for NL: BE, DE_LU, DE_AT_LU, GB, NO_2, DK_1). "
+    "Each neighbour's series are saved to plainly-named sensors on that neighbour's own transmission-zone "
+    "asset. Neighbour scarcity drives NL price spikes, so this improves spike/evening-peak forecasts.",
+)
+@click.option(
+    "--load-forecast-sensor",
+    "load_forecast_sensor",
+    type=SensorIdField(),
+    required=False,
+    help="Sensor to store the load forecast into. Defaults to the `Day-ahead load forecast` sensor.",
+)
+@click.option(
+    "--residual-load-sensor",
+    "residual_load_sensor",
+    type=SensorIdField(),
+    required=False,
+    help="Sensor to store residual load into. Defaults to the `Residual load` sensor.",
+)
+@click.option(
+    "--outages-sensor",
+    "outages_sensor",
+    type=SensorIdField(),
+    required=False,
+    help="Sensor to store generation outages into. Defaults to the `Generation outages` sensor.",
+)
+@click.option(
     "--for",
     "default_import_timerange",
     required=False,
@@ -99,6 +157,15 @@ def import_day_ahead_prices(
     country_timezone: Optional[str] = None,
     sensor: Optional[Sensor] = None,
     source: Optional[Source] = None,
+    include_all: bool = False,
+    include_load_forecast: bool = False,
+    include_wind_solar_forecast: bool = False,
+    include_residual_load: bool = False,
+    include_outages: bool = False,
+    include_neighbours: bool = False,
+    load_forecast_sensor: Optional[Sensor] = None,
+    residual_load_sensor: Optional[Sensor] = None,
+    outages_sensor: Optional[Sensor] = None,
     default_import_timerange: str = "today-and-tomorrow",
     fail_on_incomplete_data: bool = False,
 ):
@@ -106,7 +173,36 @@ def import_day_ahead_prices(
     Import forecasted prices for any date range, defaulting to today and tomorrow.
     Possibly best to run this script somewhere around or maybe two or three hours after 13:00,
     when tomorrow's prices are announced.
+
+    Optionally, also import extra regressor series that improve day-ahead *price*
+    forecasting. Use the --include-* flags to choose which of these to pull; each is
+    saved to its own sensor (MW):
+
+    \b
+      --include-all                  Shorthand: turn on all of the below (and neighbours).
+      --include-load-forecast        ENTSO-E day-ahead load forecast.
+      --include-wind-solar-forecast  ENTSO-E day-ahead wind & solar forecast
+                                     (Solar, Wind Onshore, Wind Offshore).
+      --include-residual-load        Residual load = load forecast − wind & solar
+                                     forecast. The single strongest regressor for NL
+                                     day-ahead prices. Implies fetching the two forecasts
+                                     above (but only saves them if their own flag is set).
+      --include-outages              Day-ahead-known generation outages (unavailable MW).
+                                     Only outages published before a target hour's delivery
+                                     day are counted, to avoid a look-ahead leak.
+      --include-neighbours           Also import the selected regressors (except outages)
+                                     for interconnected neighbours, on each neighbour's own
+                                     transmission-zone asset. Regional NW-European scarcity
+                                     drives NL price spikes.
     """
+    # --include-all is a shorthand that turns everything on; it composes with explicit flags.
+    if include_all:
+        include_load_forecast = True
+        include_wind_solar_forecast = True
+        include_residual_load = True
+        include_outages = True
+        include_neighbours = True
+
     # Set up FlexMeasures data structure
     country_code, country_timezone = ensure_country_code_and_timezone(
         country_code, country_timezone
@@ -152,4 +248,31 @@ def import_day_ahead_prices(
         log.info(f"Saving {len(prices)} beliefs for Sensor {pricing_sensor.name} ...")
         save_entsoe_series(
             prices, pricing_sensor, entsoe_data_source, country_timezone, now
+        )
+
+    # Optionally, import extra regressor series for price forecasting.
+    if (
+        include_load_forecast
+        or include_wind_solar_forecast
+        or include_residual_load
+        or include_outages
+    ):
+        collect_and_save_regressors(
+            client=client,
+            log=log,
+            dryrun=dryrun,
+            country_code=country_code,
+            country_timezone=country_timezone,
+            from_time=from_time,
+            until_time=until_time,
+            now=now,
+            entsoe_data_source=entsoe_data_source,
+            include_load_forecast=include_load_forecast,
+            include_wind_solar_forecast=include_wind_solar_forecast,
+            include_residual_load=include_residual_load,
+            include_outages=include_outages,
+            include_neighbours=include_neighbours,
+            load_forecast_sensor=load_forecast_sensor,
+            residual_load_sensor=residual_load_sensor,
+            outages_sensor=outages_sensor,
         )
