@@ -143,7 +143,7 @@ You can generate this token after you made an account at ENTSO-E, read more [her
    The `ENTSOE_DERIVED_DATA_SOURCE` option is used to name the source of data that this plugin derives from ENTSO-E data, like a CO₂ signal.
    Original ENTSO-E data is reported as being sourced by `"ENTSO-E"`.
 
-3. To install this plugin locally as a package, try `pip install .`.
+3. To install this plugin locally as a package, activate your FlexMeasures environment and run `uv pip install .` (or `pip install .`).
 
 
 ## Testing
@@ -169,21 +169,25 @@ This plugin targets two distinct FlexMeasures capability tiers:
 This package supports Python 3.10 through 3.12, following the Python support policy of the currently supported FlexMeasures releases.
 
 The oldest supported FlexMeasures release line is `0.31.*`.
-CI is run against `0.31.*` (minimum supported legacy release), `0.32.*` (first account-linked release), and the latest released FlexMeasures version across all supported Python versions.
+CI is run against `0.31.*` (minimum supported legacy release), `0.32.*` (first account-linked release), `1.0.*`, and the latest released FlexMeasures version across all supported Python versions.
 When a new FlexMeasures release introduces breaking changes the matrix should be updated accordingly.
 
 
 ## Development
 
-To keep our code quality high, we use pre-commit:
+We use [uv](https://docs.astral.sh/uv/) to manage the development environment.
+Set it up (this installs FlexMeasures and all dev tooling into `.venv`, plus our git hooks):
 
-    pip install pre-commit black flake8 mypy
-    pre-commit install
+    uv sync
+    uv run poe install-hooks
 
-or:
-    
-    make install-for-dev
+To keep our code quality high, we use pre-commit. Try it:
 
-Try it:
+    uv run pre-commit run --all-files --show-diff-on-failure
 
-    pre-commit run --all-files --show-diff-on-failure
+Other tasks (see `[tool.poe.tasks]` in `pyproject.toml`):
+
+    uv run pytest          # run the test suite
+    uv run poe lint        # flake8
+    uv run poe format      # black
+    uv run poe mypy        # static typing

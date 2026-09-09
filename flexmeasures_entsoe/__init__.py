@@ -3,7 +3,6 @@ import sys
 
 from flask import Blueprint
 
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 DEFAULT_COUNTRY_CODE = "NL"

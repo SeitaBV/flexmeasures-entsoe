@@ -26,7 +26,6 @@ from ..utils import (
     start_import_log,
 )
 
-
 """
 Get the CO₂ content from tomorrow's generation forecasts.
 We get the overall forecast and the solar&wind forecast, so we know the share of green energy.

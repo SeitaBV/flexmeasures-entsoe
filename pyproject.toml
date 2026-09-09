@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=62", "setuptools_scm[toml]>=6.2", "wheel>=0.29.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "flexmeasures-entsoe"
 description = "Integrating FlexMeasures with ENTSO-E"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = "Apache-2.0"
 license-files = [
     "LICENSE",
@@ -29,23 +29,71 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Natural Language :: English"
 ]
-dynamic = ["version", "dependencies"]
+dynamic = ["version"]
+
+# Only extra deps FlexMeasures doesn't already provide (it's deliberately not a
+# runtime dep, so installing this plugin never up/downgrades FlexMeasures itself).
+# timely-beliefs is omitted too: FM already requires timely-beliefs[forecast]>=3.5.5,
+# and pinning it here ourselves makes resolvers pick sktime 0.8.0, which fails to build.
+dependencies = [
+    "entsoe-py>=0.8.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/SeitaBV/flexmeasures-entsoe"
 Documentation = "https://github.com/SeitaBV/flexmeasures-entsoe"
 "Source code" = "https://github.com/SeitaBV/flexmeasures-entsoe"
 
-[project.scripts]
-flexmeasures = "flexmeasures.utils.app_utils:flexmeasures_cli"
+[dependency-groups]
+test = [
+    "pytest>=9.1.1",
+    "pytest-flask>=1.3.0",
+    "pytest-sugar>=1.1.1",
+    "pytest-cov>=7.1.0",
+]
+dev = [
+    {include-group = "test"},
+    # include flexmeasures as a dev dependency so a fresh environment has it
+    "flexmeasures>=0.31",
+    "pre-commit>=4.6.2",
+    "black>=26.5.1",
+    "flake8>=7.3.0",
+    "flake8-blind-except>=0.2.1",
+    "mypy>=2.3.1",
+    "types-pytz>=2026.3.1.20260727",
+    "watchdog>=6.0.0",
+    "poethepoet>=0.48.0",
+]
 
-[tool.setuptools]
-include-package-data = true
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["flexmeasures*"]
-
-[tool.setuptools_scm]
+[tool.hatch.version.raw-options]
+# The repo carries no git tags yet, so fall back to the hand-written version.
+fallback_version = "0.10"
 local_scheme = "no-local-version"
-version_scheme = "guess-next-dev"
+
+[tool.hatch.build.targets.wheel]
+packages = ["flexmeasures_entsoe"]
+
+[tool.poe.tasks]
+test = "pytest"
+lint = "flake8 ."
+format = "black ."
+mypy = "mypy --follow-imports skip --ignore-missing-imports flexmeasures_entsoe tests"
+install-hooks = "pre-commit install"
+
+[tool.uv]
+# darts (a FlexMeasures dependency) requires numba without an upper bound on numpy.
+# Without this constraint the resolver satisfies the newest numpy by falling back to
+# numba 0.53 (2021), which cannot be built on any Python we support.
+constraint-dependencies = ["numba>=0.61", "sktime>=0.30"]
+
+# Lock for the platforms we actually support. Without this, transitive
+# `os_name`/`platform_machine` markers fork the resolution into combinations that
+# uv cannot prove are exhaustive, which makes `uv lock` non-deterministic.
+environments = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'darwin'",
+    "sys_platform == 'win32'",
+]

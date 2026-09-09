@@ -24,7 +24,6 @@ from typing import List, Optional
 import pandas as pd
 from entsoe.mappings import NEIGHBOURS, lookup_area
 
-
 # Machine-readable choices for the CLI and the names of the sensors each regressor
 # writes to. Wind & solar reuse the sensor names already created by the generation
 # import command, so those series are not duplicated.
