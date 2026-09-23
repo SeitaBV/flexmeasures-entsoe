@@ -22,6 +22,51 @@ Importing tomorrow's generation (incl. CO2 estimated content):
 Use ``--help`` to learn more usage details.
 
 
+### Running the price import as an automation
+
+On a FlexMeasures version that supports plugin-defined automations, this plugin registers
+`entsoe-day-ahead-prices`. The automation uses the `ingestion` queue and writes to an
+existing price sensor. The ENTSO-E token remains in the server configuration.
+
+Create a configuration file named `entsoe-price-config.yml`:
+
+```yaml
+sensor: 123
+country-code: NL
+country-timezone: Europe/Amsterdam
+```
+
+Optionally, create `entsoe-price-parameters.yml` to choose the range imported by each run:
+
+```yaml
+import-range: tomorrow
+fail-on-incomplete-data: false
+```
+
+Then create a daily automation on the asset that owns sensor 123:
+
+```bash
+flexmeasures add automation \
+    --asset 45 \
+    --name "Import ENTSO-E day-ahead prices" \
+    --type entsoe-day-ahead-prices \
+    --cron "15 14 * * *" \
+    --timezone Europe/Amsterdam \
+    --config entsoe-price-config.yml \
+    --parameters entsoe-price-parameters.yml
+```
+
+The parameter file may be omitted; the default range is `today-and-tomorrow`. A worker
+that includes the ingestion queue must be running:
+
+```bash
+flexmeasures jobs run-worker --queue ingestion
+```
+
+The automation currently imports the day-ahead price series only. The CLI remains the
+way to import optional regressors and neighboring-country series.
+
+
 ### Importing extra regressors for price forecasting
 
 Research on the Dutch (NL) day-ahead market established that ENTSO-E day-ahead *fundamentals* dramatically improve day-ahead **price** forecasting, especially for hard cases (public holidays and the solar-driven midday price collapse):

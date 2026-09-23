@@ -356,6 +356,24 @@ def save_entsoe_series(
     """
     Save a series gotten from ENTSO-E to a FlexMeasures database.
     """
+    bdf = entsoe_series_to_beliefs(series, sensor, entsoe_source, country_timezone, now)
+
+    # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
+    status = save_to_db(bdf)
+    if status == "success_but_nothing_new":
+        current_app.logger.info("Done. These beliefs had already been saved before.")
+    elif status == "success_with_unchanged_beliefs_skipped":
+        current_app.logger.info("Done. Some beliefs had already been saved before.")
+
+
+def entsoe_series_to_beliefs(
+    series: pd.Series,
+    sensor: Sensor,
+    entsoe_source: Source,
+    country_timezone: str,
+    now: Optional[datetime] = None,
+) -> BeliefsDataFrame:
+    """Convert an ENTSO-E series into beliefs without saving it."""
     if not now:
         now = server_now().astimezone(pytz.timezone(country_timezone))
     belief_times = (
@@ -365,19 +383,12 @@ def save_entsoe_series(
         .set_index("clipped_belief_times")
         .index
     )  # published no later than D-1 18:00 Brussels time
-    bdf = BeliefsDataFrame(
+    return BeliefsDataFrame(
         series,
         source=entsoe_source,
         sensor=sensor,
         belief_time=belief_times,
     )
-
-    # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
-    status = save_to_db(bdf)
-    if status == "success_but_nothing_new":
-        current_app.logger.info("Done. These beliefs had already been saved before.")
-    elif status == "success_with_unchanged_beliefs_skipped":
-        current_app.logger.info("Done. Some beliefs had already been saved before.")
 
 
 def start_import_log(
