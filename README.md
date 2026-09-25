@@ -78,6 +78,17 @@ Each neighbour's series are saved to **plainly-named** sensors (`Residual load`,
 - Countries that ENTSO-E lists no neighbours for make `--include-neighbours` a harmless no-op.
 
 
+### When ENTSO-E fails
+
+The ENTSO-E API is regularly unavailable. Failing requests (connection errors, timeouts, and HTTP 429 or 5xx responses) are therefore retried, with an exponentially growing wait in between. If ENTSO-E stays down, the import fails, and the task is reported as failed (see `flexmeasures monitor`).
+
+As ENTSO-E can be down for hours, schedule the import often, e.g. every hour in the afternoon (`crontab`):
+
+    0 13-18 * * * flexmeasures entsoe import-day-ahead-prices
+
+Once the day-ahead prices (or, for the generation import, the scheduled generation) have been saved for the whole period, the import skips querying ENTSO-E. Use `--no-skip-if-complete` to import anyway, e.g. to pick up corrected data.
+
+
 ### October 1st 2025 go-live for ENTSO-E moving to 15-minute day-ahead prices
 
 ENTSO-E is moving from 1-hour day-ahead prices 15-minute day-ahead prices on October 1st 2025.
@@ -139,9 +150,13 @@ You can generate this token after you made an account at ENTSO-E, read more [her
        ENTSOE_COUNTRY_CODE = "NL"
        ENTSOE_COUNTRY_TIMEZONE = "Europe/Amsterdam"
        ENTSOE_DERIVED_DATA_SOURCE = "FlexMeasures ENTSO-E"
+       ENTSOE_MAX_RETRIES = 5
+       ENTSOE_BACKOFF_FACTOR = 2
+       ENTSOE_TIMEOUT = 60
 
    The `ENTSOE_DERIVED_DATA_SOURCE` option is used to name the source of data that this plugin derives from ENTSO-E data, like a CO₂ signal.
    Original ENTSO-E data is reported as being sourced by `"ENTSO-E"`.
+   The `ENTSOE_MAX_RETRIES`, `ENTSOE_BACKOFF_FACTOR` (in seconds) and `ENTSOE_TIMEOUT` (in seconds) options control how requests to ENTSO-E are retried when they fail.
 
 3. To install this plugin locally as a package, try `pip install .`.
 

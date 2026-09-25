@@ -10,6 +10,9 @@ DEFAULT_COUNTRY_CODE = "NL"
 DEFAULT_COUNTRY_TIMEZONE = "Europe/Amsterdam"  # This is what we receive, even if ENTSO-E documents Europe/Brussels
 DEFAULT_DATA_SOURCE_NAME = "ENTSO-E"
 DEFAULT_DERIVED_DATA_SOURCE = "FlexMeasures ENTSO-E"
+DEFAULT_MAX_RETRIES = 5
+DEFAULT_BACKOFF_FACTOR = 2  # seconds
+DEFAULT_TIMEOUT = 60  # seconds
 
 __version__ = "0.10"
 __settings__ = {
@@ -43,6 +46,21 @@ __settings__ = {
         description="String used to name the ENTSO-E data source and the account associated with it.",
         level="info",
         message_if_missing=f"'{DEFAULT_DATA_SOURCE_NAME}' will be used as a default.",
+    ),
+    "ENTSOE_MAX_RETRIES": dict(
+        description="Number of times to retry a failing request to ENTSO-E (connection errors, timeouts, HTTP 429 and 5xx).",
+        level="debug",
+        message_if_missing=f"{DEFAULT_MAX_RETRIES} will be used as a default.",
+    ),
+    "ENTSOE_BACKOFF_FACTOR": dict(
+        description="Backoff factor (in seconds) for the exponentially growing wait between retries.",
+        level="debug",
+        message_if_missing=f"{DEFAULT_BACKOFF_FACTOR} will be used as a default.",
+    ),
+    "ENTSOE_TIMEOUT": dict(
+        description="Timeout (in seconds) for a request to ENTSO-E.",
+        level="debug",
+        message_if_missing=f"{DEFAULT_TIMEOUT} will be used as a default.",
     ),
 }
 

@@ -16,6 +16,7 @@ distinct assets.
 from typing import List, Optional, Tuple
 
 import pandas as pd
+from entsoe.exceptions import NoMatchingDataError
 from flexmeasures import Sensor, Source
 
 from . import regressors
@@ -241,9 +242,7 @@ def _collect_country_regressors(
             )
     if include_outages:
         log.info("Getting generation outages (unavailable capacity) ...")
-        outages = client.query_unavailability_of_generation_units(
-            country_code, start=from_time, end=until_time
-        )
+        outages = _query_outages(client, country_code, from_time, until_time)
         # Note: outages may legitimately be empty (no announced outages), so we do not abort.
         unavailable_mw = regressors.aggregate_outages_to_hourly_unavailable_mw(
             outages, from_time, until_time
@@ -253,6 +252,16 @@ def _collect_country_regressors(
             (regressors.OUTAGES_SENSOR_SPEC, outages_sensor, unavailable_mw, True)
         )
     return results
+
+
+def _query_outages(client, country_code: str, from_time, until_time) -> pd.DataFrame:
+    """ENTSO-E answers "no matching data" if no outages were announced."""
+    try:
+        return client.query_unavailability_of_generation_units(
+            country_code, start=from_time, end=until_time
+        )
+    except NoMatchingDataError:
+        return pd.DataFrame()
 
 
 def _save_results(

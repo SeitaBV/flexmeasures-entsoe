@@ -1,14 +1,19 @@
 from typing import Dict, Optional, Tuple, Union
 from datetime import datetime, timedelta
-from logging import Logger, getLogger
+from logging import Filter, Logger, LogRecord, getLogger
+import re
 
 from entsoe import EntsoePandasClient
 from flask import current_app, has_app_context
 from packaging import version
 from pandas.tseries.frequencies import to_offset
+from requests.adapters import HTTPAdapter
+from sqlalchemy import distinct, func
+from urllib3.util.retry import Retry
 import pandas as pd
 import click
 import pytz
+import requests
 import entsoe
 
 from flexmeasures.data.utils import get_data_source, save_to_db
@@ -20,6 +25,7 @@ from flexmeasures import (
     __version__ as flexmeasures_version,
 )
 from flexmeasures.data import db
+from flexmeasures.data.models.time_series import TimedBelief
 from flexmeasures.utils.time_utils import server_now
 from timely_beliefs import BeliefsDataFrame
 from flexmeasures.cli.utils import MsgStyle
@@ -28,7 +34,45 @@ from . import (
     DEFAULT_DERIVED_DATA_SOURCE,
     DEFAULT_COUNTRY_CODE,
     DEFAULT_COUNTRY_TIMEZONE,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_BACKOFF_FACTOR,
+    DEFAULT_TIMEOUT,
 )  # noqa: E402
+
+# Temporary problems on ENTSO-E's side (not e.g. the 400 it answers "no matching data" with)
+RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+
+# ENTSO-E wants the API key as a URL parameter, so it ends up wherever the URL is logged.
+API_KEY_PATTERN = re.compile(r"(securityToken(?:=|'?: ?'))[^&'\s]+")
+LOGGERS_SHOWING_URLS = ("urllib3.connectionpool", "urllib3.util.retry", "entsoe.entsoe")
+
+
+def mask_api_key(text: str) -> str:
+    return API_KEY_PATTERN.sub(r"\1***", text)
+
+
+class MaskApiKeyFilter(Filter):
+    def filter(self, record: LogRecord) -> bool:
+        record.msg, record.args = mask_api_key(record.getMessage()), None
+        return True
+
+
+class MaskApiKeySession(requests.Session):
+    """
+    Session that masks the API key in the errors it raises and in the URL of its responses
+    (which is shown by response.raise_for_status()).
+    """
+
+    def request(self, *args, **kwargs):
+        try:
+            response = super().request(*args, **kwargs)
+        except requests.RequestException as e:
+            raise type(e)(
+                mask_api_key(str(e)), request=e.request, response=e.response
+            ) from None
+        response.url = mask_api_key(response.url)
+        return response
+
 
 FM_SUPPORTS_ACCOUNT_LINKED_SOURCES = version.parse(
     flexmeasures_version
@@ -230,10 +274,69 @@ def ensure_country_code_and_timezone(
     return country_code, country_timezone
 
 
+def create_http_session(max_retries: int, backoff_factor: float) -> requests.Session:
+    """
+    Create a session that retries connection errors, timeouts and RETRY_STATUS_CODES,
+    with exponential backoff (or as long as a Retry-After header asks).
+    Once retries run out, the last error response is returned rather than raised,
+    so entsoe-py can still parse ENTSO-E's error message from it.
+    The API key is masked in the errors and log messages about these requests.
+    """
+    retry = Retry(
+        total=max_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=RETRY_STATUS_CODES,
+        allowed_methods=frozenset({"GET"}),
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    for logger_name in LOGGERS_SHOWING_URLS:
+        logger = getLogger(logger_name)
+        if not any(isinstance(f, MaskApiKeyFilter) for f in logger.filters):
+            logger.addFilter(MaskApiKeyFilter())
+    adapter = HTTPAdapter(max_retries=retry)
+    session = MaskApiKeySession()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 def create_entsoe_client() -> EntsoePandasClient:
     auth_token = get_auth_token_from_config_and_set_server_url()
-    client = EntsoePandasClient(api_key=auth_token)
+    config = current_app.config
+    session = create_http_session(
+        max_retries=config.get("ENTSOE_MAX_RETRIES", DEFAULT_MAX_RETRIES),
+        backoff_factor=config.get("ENTSOE_BACKOFF_FACTOR", DEFAULT_BACKOFF_FACTOR),
+    )
+    client = EntsoePandasClient(
+        api_key=auth_token,
+        session=session,
+        # Our session already retries (with backoff), so switch off entsoe-py's own
+        # fixed-delay retry, which would otherwise multiply the number of attempts.
+        retry_count=1,
+        retry_delay=0,
+        timeout=config.get("ENTSOE_TIMEOUT", DEFAULT_TIMEOUT),
+    )
     return client
+
+
+def has_complete_data(
+    sensor: Sensor, from_time: pd.Timestamp, until_time: pd.Timestamp
+) -> bool:
+    """
+    Check whether data has already been saved for every event between from_time and until_time.
+    """
+    expected_periods = int((until_time - from_time) / sensor.event_resolution)
+    saved_periods = (
+        db.session.query(func.count(distinct(TimedBelief.event_start)))
+        .filter(
+            TimedBelief.sensor_id == sensor.id,
+            TimedBelief.event_start >= from_time,
+            TimedBelief.event_start < until_time,
+        )
+        .scalar()
+    )
+    return saved_periods >= expected_periods
 
 
 def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):

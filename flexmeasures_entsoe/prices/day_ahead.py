@@ -21,6 +21,7 @@ from ..utils import (
     create_entsoe_client,
     ensure_country_code_and_timezone,
     ensure_data_source,
+    has_complete_data,
     parse_from_and_to_dates,
     ensure_sensors,
     save_entsoe_series,
@@ -147,6 +148,11 @@ from ..utils import (
     default=False,
     help="If set, the import will abort if the data received is incomplete.",
 )
+@click.option(
+    "--skip-if-complete/--no-skip-if-complete",
+    default=True,
+    help="Skip the import if the day-ahead prices (and so the regressors imported with them) have already been saved for the whole period (the default), so the import can be scheduled often without querying ENTSO-E needlessly.",
+)
 @with_appcontext
 @task_with_status_report("entsoe-import-day-ahead-prices")
 def import_day_ahead_prices(
@@ -168,6 +174,7 @@ def import_day_ahead_prices(
     outages_sensor: Optional[Sensor] = None,
     default_import_timerange: str = "today-and-tomorrow",
     fail_on_incomplete_data: bool = False,
+    skip_if_complete: bool = True,
 ):
     """
     Import forecasted prices for any date range, defaulting to today and tomorrow.
@@ -231,6 +238,9 @@ def import_day_ahead_prices(
     log, now = start_import_log(
         "day-ahead price", from_time, until_time, country_code, country_timezone
     )
+    if skip_if_complete and has_complete_data(pricing_sensor, from_time, until_time):
+        log.info("Day-ahead prices have already been saved for this period. Skipping.")
+        return
 
     log.info("Getting prices ...")
     prices: pd.Series = client.query_day_ahead_prices(
