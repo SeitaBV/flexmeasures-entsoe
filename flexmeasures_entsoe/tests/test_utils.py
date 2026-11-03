@@ -11,6 +11,7 @@ from flexmeasures_entsoe.utils import (
     FM_SUPPORTS_ACCOUNT_LINKED_SOURCES,
     _ensure_entsoe_source,
     abort_if_data_incomplete,
+    drop_data_at_or_after,
     ensure_data_source,
     ensure_data_source_for_derived_data,
     parse_from_and_to_dates,
@@ -90,6 +91,129 @@ def test_parse_from_and_to_dates():
     assert e_none - s_none == timedelta(days=2)
     assert s_none == today
     assert e_none == today + timedelta(days=2)
+
+
+def _utc(value: str) -> pd.Timestamp:
+    return pd.Timestamp(value, tz="UTC")
+
+
+# Each day runs from local midnight to the next local midnight, also when it has a DST transition.
+@pytest.mark.parametrize(
+    "country_timezone, day, expected_start, expected_end",
+    [
+        ("Europe/Kyiv", "2026-03-29", "2026-03-28 22:00", "2026-03-29 21:00"),  # 23h
+        ("Europe/Kyiv", "2025-10-26", "2025-10-25 21:00", "2025-10-26 22:00"),  # 25h
+        ("Europe/Kyiv", "2026-10-05", "2026-10-04 21:00", "2026-10-05 21:00"),  # 24h
+        ("Europe/Amsterdam", "2026-03-29", "2026-03-28 23:00", "2026-03-29 22:00"),
+        ("Europe/Amsterdam", "2025-10-26", "2025-10-25 22:00", "2025-10-26 23:00"),
+        ("Europe/Amsterdam", "2026-10-05", "2026-10-04 22:00", "2026-10-05 22:00"),
+    ],
+)
+def test_parse_from_and_to_dates_with_dst_transition(
+    country_timezone, day, expected_start, expected_end
+):
+    """Importing a single day should end at the midnight after it, not 24 hours after its start."""
+    s, e = parse_from_and_to_dates(
+        from_date=datetime.strptime(day, "%Y-%m-%d"),
+        until_date=datetime.strptime(day, "%Y-%m-%d"),
+        country_timezone=country_timezone,
+    )
+
+    assert s == _utc(expected_start)
+    assert e == _utc(expected_end)
+    assert s.tzinfo.zone == e.tzinfo.zone == country_timezone
+
+
+@pytest.mark.parametrize(
+    "country_timezone, today, default_to, expected_start, expected_end",
+    # fmt: off
+    [
+        # on a DST transition day
+        ("Europe/Kyiv", "2026-03-29", "today", "2026-03-28 22:00", "2026-03-29 21:00"),
+        ("Europe/Kyiv", "2026-03-29", "tomorrow", "2026-03-29 21:00", "2026-03-30 21:00"),
+        ("Europe/Kyiv", "2026-03-29", "today-and-tomorrow", "2026-03-28 22:00", "2026-03-30 21:00"),
+        ("Europe/Kyiv", "2025-10-26", "today", "2025-10-25 21:00", "2025-10-26 22:00"),
+        ("Europe/Kyiv", "2025-10-26", "tomorrow", "2025-10-26 22:00", "2025-10-27 22:00"),
+        ("Europe/Kyiv", "2025-10-26", "today-and-tomorrow", "2025-10-25 21:00", "2025-10-27 22:00"),
+        ("Europe/Amsterdam", "2026-03-29", "today", "2026-03-28 23:00", "2026-03-29 22:00"),
+        ("Europe/Amsterdam", "2026-03-29", "tomorrow", "2026-03-29 22:00", "2026-03-30 22:00"),
+        ("Europe/Amsterdam", "2026-03-29", "today-and-tomorrow", "2026-03-28 23:00", "2026-03-30 22:00"),
+        ("Europe/Amsterdam", "2025-10-26", "today", "2025-10-25 22:00", "2025-10-26 23:00"),
+        ("Europe/Amsterdam", "2025-10-26", "tomorrow", "2025-10-26 23:00", "2025-10-27 23:00"),
+        ("Europe/Amsterdam", "2025-10-26", "today-and-tomorrow", "2025-10-25 22:00", "2025-10-27 23:00"),
+        # on the day before a DST transition day, e.g. a daily import of tomorrow's prices
+        ("Europe/Kyiv", "2026-03-28", "tomorrow", "2026-03-28 22:00", "2026-03-29 21:00"),
+        ("Europe/Kyiv", "2025-10-25", "tomorrow", "2025-10-25 21:00", "2025-10-26 22:00"),
+        ("Europe/Amsterdam", "2026-03-28", "tomorrow", "2026-03-28 23:00", "2026-03-29 22:00"),
+        ("Europe/Amsterdam", "2025-10-25", "tomorrow", "2025-10-25 22:00", "2025-10-26 23:00"),
+        # on a regular day
+        ("Europe/Kyiv", "2026-10-05", "today", "2026-10-04 21:00", "2026-10-05 21:00"),
+        ("Europe/Kyiv", "2026-10-05", "tomorrow", "2026-10-05 21:00", "2026-10-06 21:00"),
+        ("Europe/Amsterdam", "2026-10-05", "today", "2026-10-04 22:00", "2026-10-05 22:00"),
+        ("Europe/Amsterdam", "2026-10-05", "tomorrow", "2026-10-05 22:00", "2026-10-06 22:00"),
+    ],
+    # fmt: on
+)
+def test_parse_from_and_to_dates_defaults_with_dst_transition(
+    monkeypatch, country_timezone, today, default_to, expected_start, expected_end
+):
+    """
+    The default periods should consist of whole local days, also around DST transitions.
+    We monkeypatch datetime in the utils module, so that "now" is noon on the given day.
+    """
+    tz = pytz.timezone(country_timezone)
+    frozen_now = tz.localize(datetime.strptime(today, "%Y-%m-%d").replace(hour=12))
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen_now.astimezone(tz)
+
+    monkeypatch.setattr("flexmeasures_entsoe.utils.datetime", FrozenDatetime)
+
+    s, e = parse_from_and_to_dates(
+        from_date=None,
+        until_date=None,
+        country_timezone=country_timezone,
+        default_to=default_to,
+    )
+
+    assert s == _utc(expected_start)
+    assert e == _utc(expected_end)
+
+
+@pytest.mark.parametrize("resolution", ["1h", "15min"])
+@pytest.mark.parametrize(
+    "country_timezone, day, hours",
+    [
+        ("Europe/Kyiv", "2026-03-29", 23),
+        ("Europe/Kyiv", "2025-10-26", 25),
+        ("Europe/Kyiv", "2026-10-05", 24),
+        ("Europe/Amsterdam", "2026-03-29", 23),
+        ("Europe/Amsterdam", "2025-10-26", 25),
+        ("Europe/Amsterdam", "2026-10-05", 24),
+    ],
+)
+def test_drop_data_at_or_after(country_timezone, day, hours, resolution):
+    """Data for a single day should keep exactly the data of that day."""
+    day_start = pd.Timestamp(day, tz=country_timezone)
+    next_day_start = day_start + pd.DateOffset(days=1)
+    # Like EntsoePandasClient.query_day_ahead_prices: query one more day on either side,
+    # then cut the result with truncate, which includes the data at the end
+    index = pd.date_range(
+        day_start - pd.Timedelta(days=1),
+        next_day_start + pd.Timedelta(days=1),
+        freq=resolution,
+    )
+    prices = pd.Series(50.0, index=index).truncate(
+        before=day_start, after=next_day_start
+    )
+
+    prices = drop_data_at_or_after(prices, until_time=next_day_start)
+
+    assert len(prices) == hours * pd.Timedelta("1h") / pd.Timedelta(resolution)
+    assert prices.index[0] == day_start
+    assert prices.index[-1] == next_day_start - pd.Timedelta(resolution)
 
 
 # The version-branch tests below still use monkeypatching to isolate source
