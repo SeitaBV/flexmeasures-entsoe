@@ -6,6 +6,7 @@ from entsoe import EntsoePandasClient
 from flask import current_app, has_app_context
 from packaging import version
 from pandas.tseries.frequencies import to_offset
+import numpy as np
 import pandas as pd
 import click
 import pytz
@@ -303,6 +304,46 @@ def parse_from_and_to_dates(
     return start_date, end_date
 
 
+def _resample_mixed_resolutions(
+    s: pd.Series, spacings: pd.Series, sensor: Sensor
+) -> Optional[pd.Series]:
+    """Resample a series that mixes resolutions (e.g. hourly followed by 15-minute prices).
+
+    Each observation gets its own duration: the largest native resolution that fits within
+    its closest neighbour spacing, so that observations next to a gap do not cover the gap.
+    A spacing is a native resolution only if it holds for an unbroken run of at least 12 hours.
+    ENTSO-E switches resolution between whole delivery days, so shorter regular stretches are
+    treated as gaps, which keeps the previous behaviour for gappy data. (A gap pattern that
+    repeats for 12 hours or more is indistinguishable from a coarser resolution.)
+    Returns None if the series does not mix resolutions, including when one of its
+    resolutions holds for less than 12 hours; such data keeps the previous behaviour.
+    """
+    run_id = spacings.ne(spacings.shift()).cumsum()
+    run_span = spacings.groupby(run_id).transform("sum")
+    native = pd.TimedeltaIndex(
+        sorted(spacings[run_span >= pd.Timedelta(hours=12)].unique())
+    )
+    if len(native) <= 1:
+        return None
+    index_spacing = s.index.to_series().diff()
+    nearest = pd.concat([index_spacing, index_spacing.shift(-1)], axis=1).min(axis=1)
+    positions = native.searchsorted(nearest.values, side="right") - 1
+    durations = native[positions.clip(min=0)]
+    step = min(native[0], sensor.event_resolution)
+    slots = np.asarray(durations // step)
+    offsets = np.arange(slots.sum()) - np.repeat(slots.cumsum() - slots, slots)
+    index = s.index.repeat(slots) + step * offsets
+    s = pd.Series(s.values.repeat(slots), index=index, name=s.name)
+    logger = current_app.logger if has_app_context() else getLogger(__name__)
+    logger.warning(
+        f"Data for {sensor.name} mixes resolutions {[str(r) for r in native]}, "
+        f"resampling each part to the sensor resolution of {sensor.event_resolution}."
+    )
+    if step < sensor.event_resolution:
+        s = s.resample(sensor.event_resolution).mean().dropna()
+    return s
+
+
 def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
     try:
         inferred_frequency = pd.infer_freq(s.index)
@@ -319,6 +360,9 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
             raise ValueError(
                 "Data has no discernible frequency from which to derive an event resolution."
             )
+        mixed = _resample_mixed_resolutions(s, spacings, sensor)
+        if mixed is not None:
+            return mixed
         inferred_resolution = spacings.mode().iloc[0]
         logger = current_app.logger if has_app_context() else getLogger(__name__)
         logger.warning(
