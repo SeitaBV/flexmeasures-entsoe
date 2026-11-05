@@ -24,7 +24,7 @@ Use ``--help`` to learn more usage details.
 
 ### Running the price import as an automation
 
-On a FlexMeasures version that supports plugin-defined automations, this plugin registers
+On FlexMeasures v1.1.0 or later, this plugin registers
 `entsoe-day-ahead-prices`. The automation uses the `ingestion` queue and writes to an
 existing price sensor. The ENTSO-E token remains in the server configuration.
 
