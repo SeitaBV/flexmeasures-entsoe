@@ -26,6 +26,7 @@ from ..utils import (
     save_entsoe_series,
     abort_if_data_empty,
     abort_if_data_incomplete,
+    drop_data_at_or_after,
     resample_if_needed,
     start_import_log,
 )
@@ -236,6 +237,7 @@ def import_day_ahead_prices(
     prices: pd.Series = client.query_day_ahead_prices(
         country_code, start=from_time, end=until_time
     )
+    prices = drop_data_at_or_after(prices, until_time=until_time)
     abort_if_data_empty(prices)
     if fail_on_incomplete_data:
         abort_if_data_incomplete(
