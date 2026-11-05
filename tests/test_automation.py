@@ -128,3 +128,31 @@ def test_compute_rejects_incomplete_prices_in_strict_mode(monkeypatch):
 
     with pytest.raises(ValueError, match="expected 4 periods but got 3"):
         make_generator()._compute(fail_on_incomplete_data=True)
+
+
+def test_compute_leaves_out_the_price_at_the_end_of_the_period(monkeypatch):
+    """entsoe-py includes the end of the queried period, which the import excludes."""
+    index = pd.date_range("2026-09-24", periods=5, freq="15min", tz="Europe/Amsterdam")
+    prices = pd.Series([80.0, 81.0, 82.0, 83.0, 84.0], index=index)
+    _, _, end = prepare_compute(monkeypatch, prices)
+    converted = []
+    monkeypatch.setattr(
+        automation_module,
+        "entsoe_series_to_beliefs",
+        lambda series, *args: converted.append(series),
+    )
+
+    make_generator()._compute()
+
+    assert converted[0].index[-1] == end - timedelta(minutes=15)
+    assert len(converted[0]) == 4
+
+
+def test_strict_mode_does_not_count_the_price_at_the_end_of_the_period(monkeypatch):
+    index = pd.date_range("2026-09-24", periods=4, freq="15min", tz="Europe/Amsterdam")
+    prices = pd.Series([80.0, 81.0, 82.0, 83.0], index=index).drop(index[1])
+    prices.loc[index[-1] + pd.Timedelta(minutes=15)] = 84.0
+    prepare_compute(monkeypatch, prices)
+
+    with pytest.raises(ValueError, match="expected 4 periods but got 3"):
+        make_generator()._compute(fail_on_incomplete_data=True)

@@ -8,6 +8,7 @@ from flexmeasures.data.schemas import SensorIdField
 
 from ..utils import (
     create_entsoe_client,
+    drop_data_at_or_after,
     ensure_country_code_and_timezone,
     entsoe_series_to_beliefs,
     parse_from_and_to_dates,
@@ -74,6 +75,7 @@ class EntsoeDayAheadPriceImporter(DataGenerator):
         prices: pd.Series = client.query_day_ahead_prices(
             country_code, start=from_time, end=until_time
         )
+        prices = drop_data_at_or_after(prices, until_time=until_time)
         if prices.empty:
             raise ValueError(
                 "ENTSO-E returned no day-ahead prices for the requested period."
