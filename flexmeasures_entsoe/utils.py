@@ -6,6 +6,7 @@ from entsoe import EntsoePandasClient
 from flask import current_app, has_app_context
 from packaging import version
 from pandas.tseries.frequencies import to_offset
+from sqlalchemy import func
 import pandas as pd
 import click
 import pytz
@@ -40,10 +41,18 @@ if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
 
 
 def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
+    """Find the oldest source the CLI import records under.
+
+    Sources with a model belong to a data generator, such as the day-ahead price automation's,
+    which shares the ENTSO-E name but records under the organisation owning its asset,
+    so the CLI leaves them out.
+    """
     return (
         Source.query.filter(
             Source.name == source_name,
             Source.type == source_type,
+            # FlexMeasures counts an empty model as none, so match both.
+            func.coalesce(Source.model, "") == "",
         )
         .order_by(Source.id)
         .first()
