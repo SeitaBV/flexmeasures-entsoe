@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from marshmallow import ValidationError
+from flask import Flask
 import pandas as pd
 import pytest
 
@@ -156,3 +157,23 @@ def test_strict_mode_does_not_count_the_price_at_the_end_of_the_period(monkeypat
 
     with pytest.raises(ValueError, match="expected 4 periods but got 3"):
         make_generator()._compute(fail_on_incomplete_data=True)
+
+
+@pytest.mark.parametrize(
+    "configured_name, expected_name",
+    [(None, "ENTSO-E"), ("ENTSO-E (test server)", "ENTSO-E (test server)")],
+)
+def test_automation_source_is_named_like_the_cli_source(configured_name, expected_name):
+    """Moving a sensor from the CLI import to the automation keeps the name of the source its prices are recorded under."""
+    app = Flask(__name__)
+    app.config["FLEXMEASURES_DEFAULT_DATASOURCE"] = "FlexMeasures"
+    if configured_name is not None:
+        app.config["ENTSOE_DATA_SOURCE_NAME"] = configured_name
+
+    with app.app_context():
+        source_info = EntsoeDayAheadPriceImporter.get_data_source_info()
+
+    assert source_info["source"] == expected_name
+    # The model still tells the automation's source apart from the CLI's, which has none.
+    assert source_info["model"] == "EntsoeDayAheadPriceImporter"
+    assert source_info["source_type"] == "market"

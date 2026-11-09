@@ -1,11 +1,13 @@
 """Automation support for importing ENTSO-E day-ahead prices."""
 
 import pandas as pd
+from flask import current_app
 from marshmallow import fields, Schema, validate
 
 from flexmeasures.data.models.data_sources import DataGenerator
 from flexmeasures.data.schemas import SensorIdField
 
+from .. import DEFAULT_DATA_SOURCE_NAME
 from ..utils import (
     create_entsoe_client,
     drop_data_at_or_after,
@@ -45,6 +47,19 @@ class EntsoeDayAheadPriceImporter(DataGenerator):
     __version__ = "0.10"
     _config_schema = EntsoeDayAheadPriceConfigSchema()
     _parameters_schema = EntsoeDayAheadPriceParametersSchema()
+
+    @classmethod
+    def get_data_source_info(cls) -> dict:
+        """Name the automation's source after ENTSO-E, as the CLI import names its source.
+
+        Without this, the source is named after FLEXMEASURES_DEFAULT_DATASOURCE ("FlexMeasures" by default),
+        so moving a sensor from the CLI import to the automation would change the name of the source its prices are recorded under.
+        """
+        source_info = super().get_data_source_info()
+        source_info["source"] = current_app.config.get(
+            "ENTSOE_DATA_SOURCE_NAME", DEFAULT_DATA_SOURCE_NAME
+        )
+        return source_info
 
     @property
     def output_sensors(self) -> list:
