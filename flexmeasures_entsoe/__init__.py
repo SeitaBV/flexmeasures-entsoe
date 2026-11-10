@@ -52,3 +52,22 @@ entsoe_data_bp.cli.help = "ENTSO-E Data commands"
 
 from .generation import day_ahead as day_ahead_generation  # noqa: E402,F401
 from .prices import day_ahead as day_ahead_prices  # noqa: E402,F401
+
+# Plugin automations were introduced after the oldest supported FlexMeasures release.
+# Keep the CLI available when this plugin is installed alongside an older release.
+try:
+    from flexmeasures.data.automations import AutomationHandler  # noqa: E402
+except ImportError:
+    pass
+else:
+    from .prices.automation import EntsoeDayAheadPriceImporter  # noqa: E402
+
+    __automation_types__ = [
+        AutomationHandler(
+            type_id="entsoe-day-ahead-prices",
+            display_name="ENTSO-E day-ahead prices",
+            generator_class=EntsoeDayAheadPriceImporter,
+            queue="ingestion",
+            result_noun="price import",
+        )
+    ]
