@@ -400,7 +400,7 @@ def resample_if_needed(s: pd.Series, sensor: Sensor) -> pd.Series:
             freq=target_resolution,
             inclusive="left",
         )
-        s = s.reindex(index).pad()
+        s = s.reindex(index).ffill()
     elif inferred_resolution < target_resolution:
         current_app.logger.debug(f"Downsampling data for {sensor.name} ...")
         # Gaps in the data leave empty (NaN) buckets, which are not saved as beliefs.

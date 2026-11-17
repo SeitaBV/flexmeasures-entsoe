@@ -287,6 +287,24 @@ def test_resample_if_needed_still_raises_without_any_spacing():
         resample_if_needed(series, sensor)
 
 
+def test_resample_if_needed_repeats_each_hourly_value_over_its_quarter_hours():
+    from datetime import timedelta
+
+    from flask import Flask
+
+    from flexmeasures_entsoe.utils import resample_if_needed
+
+    series = pd.Series([10.0, 20.0, 30.0], index=HOURLY[:3])
+    sensor = FakeSensor("Day-ahead prices", event_resolution=timedelta(minutes=15))
+
+    with Flask(__name__).app_context():
+        result = resample_if_needed(series, sensor)
+
+    assert result.index[0] == HOURLY[0]
+    assert result.index[-1] == HOURLY[2] + timedelta(minutes=45)
+    assert result.tolist() == [10.0] * 4 + [20.0] * 4 + [30.0] * 4
+
+
 def _run_save_results_with_unalignable_series(monkeypatch, strict):
     """Prepare _save_results with one unalignable series among good ones."""
     saved = []
