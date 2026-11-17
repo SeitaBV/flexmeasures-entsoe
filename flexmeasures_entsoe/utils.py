@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Tuple, Union
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from logging import Logger, getLogger
 
 from entsoe import EntsoePandasClient
@@ -7,6 +7,7 @@ from flask import current_app, has_app_context
 from packaging import version
 from pandas.tseries.frequencies import to_offset
 import numpy as np
+from sqlalchemy import func
 import pandas as pd
 import click
 import pytz
@@ -41,10 +42,18 @@ if FM_SUPPORTS_ACCOUNT_LINKED_SOURCES:
 
 
 def _find_existing_source(source_name: str, source_type: str) -> Optional[Source]:
+    """Find the oldest source the CLI import records under.
+
+    Sources with a model belong to a data generator, such as the day-ahead price automation's,
+    which shares the ENTSO-E name but records under the organisation owning its asset,
+    so the CLI leaves them out.
+    """
     return (
         Source.query.filter(
             Source.name == source_name,
             Source.type == source_type,
+            # FlexMeasures counts an empty model as none, so match both.
+            func.coalesce(Source.model, "") == "",
         )
         .order_by(Source.id)
         .first()
@@ -260,6 +269,16 @@ def abort_if_data_incomplete(
         raise click.Abort
 
 
+def drop_data_at_or_after(
+    data: Union[pd.DataFrame, pd.Series], until_time: pd.Timestamp
+) -> Union[pd.DataFrame, pd.Series]:
+    """
+    Drop the data from until_time onwards, which is the exclusive end of the queried period.
+    entsoe-py includes data at the end of the period, as it cuts its result with truncate(before=start, after=end).
+    """
+    return data[data.index < until_time]
+
+
 def parse_from_and_to_dates(
     from_date: Optional[datetime],
     until_date: Optional[datetime],
@@ -268,12 +287,13 @@ def parse_from_and_to_dates(
 ) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
     Parse CLI options for start and end date (or set default to today and tomorrow) for inout to entsoe-py
-    Note: we expect only dates as input here, and until_date is inclusive, so we extend it with 24h - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
+    Note: we expect only dates as input here, and until_date is inclusive, so we end at the midnight after it - so if from_date is equal to until_date, we return 00:00 and 24:00 of that day.
+    The end is exclusive. Both are local midnights, so a day with a DST transition lasts 23 or 25 hours.
     Note:  entsoe-py expects time params as pd.Timestamp
     """
     tz = pytz.timezone(country_timezone)
-    now = datetime.now(tz)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Count in local calendar days (naive), and only localize the results
+    today_start = datetime.combine(datetime.now(tz).date(), time())
 
     if default_to == "today":
         default_start = today_start
@@ -290,16 +310,15 @@ def parse_from_and_to_dates(
         )
 
     if from_date is None:
-        start_date = pd.Timestamp(default_start)
+        start_date = pd.Timestamp(default_start, tzinfo=tz)
     else:
         start_date = pd.Timestamp(from_date, tzinfo=pytz.timezone(country_timezone))
 
     if until_date is None:
-        end_date = pd.Timestamp(default_end)
+        end_date = pd.Timestamp(default_end, tzinfo=tz)
     else:
-        end_date = pd.Timestamp(until_date, tzinfo=pytz.timezone(country_timezone))
-        # The until_date provided is considered inclusive, so we add 24 hours to include the entire day
-        end_date += pd.Timedelta(hours=24)
+        # The until_date provided is considered inclusive, so we end at the midnight after it
+        end_date = pd.Timestamp(until_date + timedelta(days=1), tzinfo=tz)
 
     return start_date, end_date
 
@@ -400,6 +419,24 @@ def save_entsoe_series(
     """
     Save a series gotten from ENTSO-E to a FlexMeasures database.
     """
+    bdf = entsoe_series_to_beliefs(series, sensor, entsoe_source, country_timezone, now)
+
+    # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
+    status = save_to_db(bdf)
+    if status == "success_but_nothing_new":
+        current_app.logger.info("Done. These beliefs had already been saved before.")
+    elif status == "success_with_unchanged_beliefs_skipped":
+        current_app.logger.info("Done. Some beliefs had already been saved before.")
+
+
+def entsoe_series_to_beliefs(
+    series: pd.Series,
+    sensor: Sensor,
+    entsoe_source: Source,
+    country_timezone: str,
+    now: Optional[datetime] = None,
+) -> BeliefsDataFrame:
+    """Convert an ENTSO-E series into beliefs without saving it."""
     if not now:
         now = server_now().astimezone(pytz.timezone(country_timezone))
     belief_times = (
@@ -409,19 +446,12 @@ def save_entsoe_series(
         .set_index("clipped_belief_times")
         .index
     )  # published no later than D-1 18:00 Brussels time
-    bdf = BeliefsDataFrame(
+    return BeliefsDataFrame(
         series,
         source=entsoe_source,
         sensor=sensor,
         belief_time=belief_times,
     )
-
-    # TODO: evaluate some traits of the data via FlexMeasures, see https://github.com/SeitaBV/flexmeasures-entsoe/issues/3
-    status = save_to_db(bdf)
-    if status == "success_but_nothing_new":
-        current_app.logger.info("Done. These beliefs had already been saved before.")
-    elif status == "success_with_unchanged_beliefs_skipped":
-        current_app.logger.info("Done. Some beliefs had already been saved before.")
 
 
 def start_import_log(
