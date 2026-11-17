@@ -15,7 +15,6 @@ import os
 import pandas as pd
 import pytest
 
-
 # Load flexmeasures_entsoe/prices/regressors.py in isolation.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REGRESSORS_PATH = os.path.join(

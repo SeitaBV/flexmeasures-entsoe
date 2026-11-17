@@ -1,3 +1,0 @@
-# only listing extra dependencies that flexmeasures does not have
-entsoe-py
-timely-beliefs>=3.2.3

@@ -10,6 +10,20 @@ permissions:
   contents: read
 
 jobs:
+  lock-check:
+    name: "uv.lock is up to date"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Check that uv.lock matches pyproject.toml
+        run: uv lock --check
+
   test:
     name: "Python ${{ matrix.python-version }} / FlexMeasures ${{ matrix.flexmeasures.version }}"
     runs-on: ubuntu-latest
@@ -22,21 +36,33 @@ jobs:
             requirement: "flexmeasures==0.31.*"
           - version: "0.32.*"
             requirement: "flexmeasures==0.32.*"
+          - version: "1.0.*"
+            requirement: "flexmeasures==1.0.*"
           - version: "latest"
             requirement: "flexmeasures"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install the plugin and its dev dependencies
+        # The dev group is used (not just test) because it pulls FlexMeasures and its
+        # whole transitive tree from the lock file. The compatibility-target step below
+        # then only has to swap FlexMeasures itself, and resolves against an environment
+        # that is already fully and correctly pinned.
+        run: uv sync --locked --group dev --python ${{ matrix.python-version }}
 
       - name: Install FlexMeasures compatibility target
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "${{ matrix.flexmeasures.requirement }}"
+        # The lock file pins a single FlexMeasures version; this matrix job needs
+        # its own, so it is installed on top of the synced environment.
+        run: uv pip install "${{ matrix.flexmeasures.requirement }}"
 
       - name: Run tests
-        run: make test
+        run: uv run --no-sync pytest
