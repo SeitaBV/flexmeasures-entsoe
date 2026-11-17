@@ -41,6 +41,60 @@ def test_abort_if_data_incomplete():
         abort_if_data_incomplete(incomplete_data, start, end, resolution)
 
 
+def day_of_prices(freq, missing=(), day="2026-11-12", tz="Europe/Amsterdam"):
+    """Prices for one local day at the given frequency, leaving out the given positions."""
+    start = pd.Timestamp(day, tz=tz)
+    end = pd.Timestamp(day, tz=tz) + pd.DateOffset(days=1)
+    index = pd.date_range(start, end, freq=freq, inclusive="left")
+    prices = pd.Series(range(len(index)), index=index, dtype=float)
+    return prices.drop(index[list(missing)]), start, end
+
+
+@pytest.mark.parametrize(
+    "freq, missing, day, complete",
+    [
+        ("1h", (), "2026-11-12", True),  # hourly prices for a 15-minute sensor
+        ("15min", (), "2026-11-12", True),
+        ("1h", (), "2026-10-25", True),  # 25 hours on the DST transition day
+        ("1h", (12,), "2026-11-12", False),  # a missing hour in the middle ...
+        ("1h", (0,), "2026-11-12", False),  # ... at the start
+        ("1h", (23,), "2026-11-12", False),  # ... or at the end
+        ("1h", tuple(range(1, 24, 2)), "2026-11-12", False),  # every other hour
+        ("15min", (50,), "2026-11-12", False),  # a missing quarter-hour
+        ("15min", (95,), "2026-11-12", False),
+    ],
+)
+def test_abort_if_data_incomplete_counts_the_time_the_data_covers(
+    freq, missing, day, complete
+):
+    """Hourly prices cover four 15-minute periods each, but a missing hour is still missing."""
+    prices, start, end = day_of_prices(freq, missing, day)
+    resolution = pd.Timedelta(minutes=15)
+    if complete:
+        abort_if_data_incomplete(prices, start, end, resolution)
+    else:
+        with pytest.raises(click.Abort):
+            abort_if_data_incomplete(prices, start, end, resolution)
+
+
+def test_abort_if_data_incomplete_on_a_day_that_switches_to_15_minutes():
+    """A day that starts hourly and continues per quarter-hour is complete."""
+    hourly, start, end = day_of_prices("1h")
+    quarters, _, _ = day_of_prices("15min")
+    switch = start + pd.Timedelta(hours=12)
+    prices = pd.concat(
+        [hourly[hourly.index < switch], quarters[quarters.index >= switch]]
+    )
+    abort_if_data_incomplete(prices, start, end, pd.Timedelta(minutes=15))
+    with pytest.raises(click.Abort):
+        abort_if_data_incomplete(
+            prices.drop(switch + pd.Timedelta(hours=1)),
+            start,
+            end,
+            pd.Timedelta(minutes=15),
+        )
+
+
 def test_parse_from_and_to_dates():
     """
     Tests CLI date parsing logic:

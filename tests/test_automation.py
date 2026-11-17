@@ -131,6 +131,16 @@ def test_compute_rejects_incomplete_prices_in_strict_mode(monkeypatch):
         make_generator()._compute(fail_on_incomplete_data=True)
 
 
+def test_strict_mode_accepts_an_hourly_price_for_a_15_minute_sensor(monkeypatch):
+    """Some zones publish hourly day-ahead prices; one hourly price covers the queried hour."""
+    index = pd.date_range("2026-09-24", periods=1, freq="1h", tz="Europe/Amsterdam")
+    prepare_compute(monkeypatch, pd.Series([80.0], index=index))
+
+    results = make_generator()._compute(fail_on_incomplete_data=True)
+
+    assert results[0]["data"] == "beliefs"
+
+
 def test_compute_leaves_out_the_price_at_the_end_of_the_period(monkeypatch):
     """entsoe-py includes the end of the queried period, which the import excludes."""
     index = pd.date_range("2026-09-24", periods=5, freq="15min", tz="Europe/Amsterdam")

@@ -9,6 +9,7 @@ from flexmeasures.data.schemas import SensorIdField
 
 from .. import DEFAULT_DATA_SOURCE_NAME
 from ..utils import (
+    count_covered_periods,
     create_entsoe_client,
     drop_data_at_or_after,
     ensure_country_code_and_timezone,
@@ -99,10 +100,13 @@ class EntsoeDayAheadPriceImporter(DataGenerator):
             expected_periods = int(
                 (until_time - from_time) / pricing_sensor.event_resolution
             )
-            if len(prices) < expected_periods:
+            covered_periods = count_covered_periods(
+                prices, until_time, pricing_sensor.event_resolution
+            )
+            if covered_periods < expected_periods:
                 raise ValueError(
                     "ENTSO-E returned incomplete day-ahead prices: "
-                    f"expected {expected_periods} periods but got {len(prices)}."
+                    f"expected {expected_periods} periods but got {covered_periods}."
                 )
         prices = resample_if_needed(prices, pricing_sensor)
         log.debug("Prices: \n%s", prices)
