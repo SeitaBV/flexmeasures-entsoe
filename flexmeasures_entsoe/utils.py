@@ -254,6 +254,40 @@ def abort_if_data_empty(data: Union[pd.DataFrame, pd.Series]):
         raise click.Abort
 
 
+# Resolutions in which ENTSO-E publishes the series imported here, longest first.
+ENTSOE_RESOLUTIONS = (pd.Timedelta(hours=1), pd.Timedelta(minutes=15))
+
+
+def count_covered_periods(
+    data: Union[pd.DataFrame, pd.Series],
+    until_time: pd.Timestamp,
+    resolution: timedelta,
+) -> int:
+    """
+    Count the periods of the given resolution that the data covers, before any resampling.
+
+    Each row covers the longest ENTSO-E resolution that fits into the spacing to its nearest
+    neighbour (the end of the queried period counts as the neighbour of the last row).
+    So 24 hourly prices cover 96 quarter-hours, while a missing hour or quarter-hour stays
+    uncovered, also in a series that mixes both resolutions.
+    Without a DatetimeIndex, each row counts as one period.
+    """
+    if not isinstance(data.index, pd.DatetimeIndex):
+        return len(data)
+    starts = list(data.index.unique().sort_values())
+    covered = pd.Timedelta(0)
+    for i, start in enumerate(starts):
+        next_start = starts[i + 1] if i + 1 < len(starts) else until_time
+        spacing = next_start - start
+        if i > 0:
+            spacing = min(spacing, start - starts[i - 1])
+        covered += next(
+            (r for r in ENTSOE_RESOLUTIONS if r <= spacing),
+            max(spacing, pd.Timedelta(0)),
+        )
+    return int(covered / resolution)
+
+
 def abort_if_data_incomplete(
     data: Union[pd.DataFrame, pd.Series],
     from_time: pd.Timestamp,
@@ -261,9 +295,10 @@ def abort_if_data_incomplete(
     resolution: pd.Timedelta,
 ):
     expected_periods = int((until_time - from_time) / resolution)
-    if len(data) < expected_periods:
+    covered_periods = count_covered_periods(data, until_time, resolution)
+    if covered_periods < expected_periods:
         click.secho(
-            f"Result is incomplete. Expected {expected_periods} periods but got {len(data)}. Probably ENTSO-E does not provide these forecasts yet ...",
+            f"Result is incomplete. Expected {expected_periods} periods but got {covered_periods}. Probably ENTSO-E does not provide these forecasts yet ...",
             **MsgStyle.ERROR,
         )
         raise click.Abort
